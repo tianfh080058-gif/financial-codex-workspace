@@ -1,0 +1,15 @@
+# Upstream source repositories
+upstream/
+
+# Local / OS noise
+.DS_Store
+Thumbs.db
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local environment
+.env
+.venv/
+venv/

@@ -1,0 +1,11 @@
+# Project-scoped Codex configuration for financial-codex-workspace
+
+# Keep root detection stable for this repo.
+project_root_markers = [".git"]
+
+# This project relies heavily on AGENTS.md and .agents/skills.
+# Do not put secrets or API keys in this file.
+
+[profiles.financial]
+# Use this profile when doing financial-services workflow tasks.
+# Keep approvals conservative unless I explicitly loosen them.
