@@ -2,7 +2,7 @@
 
 **金融任务必须先使用 `financial-services-skill-router`，再按本索引选择 downstream skills。**
 
-Total skills indexed: 118
+Total skills indexed: 119
 
 This is a lightweight routing index generated from `.agents/skills/*/SKILL.md`. It lists each skill directory, frontmatter name, and description so Codex can classify the workflow before reading detailed skill instructions.
 
@@ -18,7 +18,7 @@ This is a lightweight routing index generated from `.agents/skills/*/SKILL.md`. 
 | Accounting / audit / reconciliation | 20 | 17 | 37 |
 | Risk / compliance / controls | 5 | 0 | 5 |
 | Asset management / portfolio / client reporting | 1 | 0 | 1 |
-| Data extraction / Excel / PDF / model review | 5 | 0 | 5 |
+| Data extraction / Excel / PDF / model review | 6 | 0 | 6 |
 | Other | 2 | 0 | 2 |
 
 ## Router / orchestration
@@ -154,6 +154,7 @@ This is a lightweight routing index generated from `.agents/skills/*/SKILL.md`. 
 
 | Directory | Name | Description |
 |---|---|---|
+| `akshare` | `akshare` | Use AKShare, the Python open-source financial data interface library, for source-backed retrieval of public market data, Chinese A-share data, funds, bonds, futures, macroeconomic indicators, financial statements, and other finance datasets. Use when users ask to fetch, validate, refresh, or prototype analysis with publicly available financial data through AKShare, especially for China market workflows, while preserving source citations, interface names, parameters, timestamps, missing-data notes, and strict no-fabrication controls. |
 | `vertical-financial-analysis-xlsx-author` | `vertical-financial-analysis-xlsx-author` | Produce a .xlsx file on disk (headless) instead of driving a live Excel workbook — for headless Codex sessions with no open Office app. Use when users need to produce Excel workbooks as file artifacts with formulas, formatting, source notes, model checks, and recalculation guidance in financial analysis and modeling workflows. |
 | `vertical-financial-analysis-ppt-template-creator` | `vertical-financial-analysis-ppt-template-creator` | Creates self-contained PPT template SKILLS (not presentations) from user-provided PowerPoint templates. Use ONLY when a user wants to create a reusable skill from their template. For creating actual presentations, use the pptx skill instead. Use when users need to create reusable PowerPoint templates, slide masters, layouts, formatting standards, and presentation assets in financial analysis and modeling workflows. |
 | `vertical-financial-analysis-pptx-author` | `vertical-financial-analysis-pptx-author` | Produce a .pptx file on disk (headless) instead of driving a live PowerPoint document — for headless Codex sessions with no open Office app. Use when users need to produce PowerPoint decks as file artifacts with structured slides, charts, tables, branding, and quality checks in financial analysis and modeling workflows. |
