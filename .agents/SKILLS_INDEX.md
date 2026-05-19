@@ -2,7 +2,7 @@
 
 **金融任务必须先使用 `financial-services-skill-router`，再按本索引选择 downstream skills。**
 
-Total skills indexed: 119
+Total skills indexed: 123
 
 This is a lightweight routing index generated from `.agents/skills/*/SKILL.md`. It lists each skill directory, frontmatter name, and description so Codex can classify the workflow before reading detailed skill instructions.
 
@@ -10,15 +10,15 @@ This is a lightweight routing index generated from `.agents/skills/*/SKILL.md`. 
 
 | Group | Listed | Additional | Total |
 |---|---:|---:|---:|
-| Router / orchestration | 1 | 0 | 1 |
-| Valuation / DCF / comps / precedents | 20 | 5 | 25 |
+| Router / orchestration | 2 | 0 | 2 |
+| Valuation / DCF / comps / precedents | 22 | 5 | 27 |
 | Investment banking / M&A / pitch / memo | 20 | 0 | 20 |
 | Earnings / filings / research | 16 | 0 | 16 |
 | Credit / debt / covenants | 6 | 0 | 6 |
 | Accounting / audit / reconciliation | 20 | 17 | 37 |
 | Risk / compliance / controls | 5 | 0 | 5 |
 | Asset management / portfolio / client reporting | 1 | 0 | 1 |
-| Data extraction / Excel / PDF / model review | 6 | 0 | 6 |
+| Data extraction / Excel / PDF / model review | 7 | 0 | 7 |
 | Other | 2 | 0 | 2 |
 
 ## Router / orchestration
@@ -26,11 +26,14 @@ This is a lightweight routing index generated from `.agents/skills/*/SKILL.md`. 
 | Directory | Name | Description |
 |---|---|---|
 | `financial-services-skill-router` | `financial-services-skill-router` | Router for all financial services, accounting, investing, capital markets, private equity, investment banking, wealth management, fund administration, KYC, valuation, earnings, equity research, and financial modeling requests. Use when any user request involves financial analysis, financial documents, spreadsheets, presentations, market data, company analysis, transaction work, portfolio review, or regulated financial workflows, before selecting a more specific financial-services skill. |
+| `china-market-overlay` | `china-market-overlay` | Use when a financial task involves China market securities, A shares, Hong Kong-listed Chinese companies, China market data, RMB financials, Chinese disclosures, iFinD, 同花顺, AKShare, 巨潮资讯, 上交所, 深交所, 北交所, 港交所, industry classifications, adjustment basis, trading calendars, or China-specific data integrity requirements before downstream valuation, DCF, comps, earnings, equity research, or financial modeling skills. |
 
 ## Valuation / DCF / comps / precedents
 
 | Directory | Name | Description |
 |---|---|---|
+| `a-share-valuation-template` | `a-share-valuation-template` | Use when building or reviewing A-share public company valuation workflows that need market snapshot, trading multiples, historical valuation percentiles, DCF framework, equity value bridge, RMB units, disclosure mapping, iFinD or AKShare data sourcing, missing data handling, and strict no-fabrication QA before producing an investment memo, model framework, or Excel valuation output. |
+| `a-share-comps-best-practice` | `a-share-comps-best-practice` | Use when building or reviewing China A-share comparable company analysis, peer sets, relative valuation, trading multiples, industry benchmarking, percentile analysis, and peer rejection logs with iFinD, AKShare, filings, RMB units, industry classification, ST or suspension filters, negative denominator handling, and strict source-backed QA. |
 | `vertical-financial-analysis-comps-analysis` | `vertical-financial-analysis-comps-analysis` | Build institutional-grade comparable company analyses with operating metrics, valuation multiples, and statistical benchmarking in Excel/spreadsheet format. **Perfect for:** - Public company valuation (M&A, investment analysis) - Benchmarking performance vs. industry peers - Pricing IPOs or funding rounds - Identifying valuation outliers (over/under-valued) - Supporting investment committee presentations - Creating sector overview reports **Not ideal for:** - Private companies without comparable public peers - Highly diversified conglomerates - Distressed/bankrupt companies - Pre-revenue startups - Companies with unique business models Use when users need to build comparable company analyses, peer sets, operating metric spreads, trading multiples, and valuation summaries in financial analysis and modeling workflows. |
 | `vertical-financial-analysis-dcf-model` | `vertical-financial-analysis-dcf-model` | Real DCF (Discounted Cash Flow) model creation for equity valuation. Retrieves financial data from SEC filings and analyst reports, builds comprehensive cash flow projections with proper WACC calculations, performs sensitivity analysis, and outputs professional Excel models with executive summaries. Use when users need to value a company using DCF methodology, request intrinsic value analysis, or ask for detailed financial modeling with growth projections and terminal value calculations. |
 | `vertical-financial-analysis-deck-refresh` | `vertical-financial-analysis-deck-refresh` | Updates a presentation with new numbers — quarterly refreshes, earnings updates, comp rolls, rebased market data. Use whenever the user asks to "update the deck with Q4 numbers", "refresh the comps", "roll this forward", "swap in the new earnings", "change all the $485M to $512M", or any request to swap figures across an existing deck without rebuilding it. |
@@ -155,6 +158,7 @@ This is a lightweight routing index generated from `.agents/skills/*/SKILL.md`. 
 | Directory | Name | Description |
 |---|---|---|
 | `akshare` | `akshare` | Use AKShare, the Python open-source financial data interface library, for source-backed retrieval of public market data, Chinese A-share data, funds, bonds, futures, macroeconomic indicators, financial statements, and other finance datasets. Use when users ask to fetch, validate, refresh, or prototype analysis with publicly available financial data through AKShare, especially for China market workflows, while preserving source citations, interface names, parameters, timestamps, missing-data notes, and strict no-fabrication controls. |
+| `ifind-http-api` | `ifind-http-api` | Use the iFinD / 同花顺 HTTP API for authenticated, source-backed retrieval of licensed financial market data, including access-token checks, real-time quotation, historical quotation, basic data, date sequence, EDB, announcements, and code conversion workflows. Use when users provide iFinD HTTP API credentials, refresh_token, access_token, or an iFinD API manual and ask to install, test, validate, or use 同花顺 data interfaces while protecting secrets, recording endpoint names, parameters, timestamps, missing data, and strict no-fabrication controls. |
 | `vertical-financial-analysis-xlsx-author` | `vertical-financial-analysis-xlsx-author` | Produce a .xlsx file on disk (headless) instead of driving a live Excel workbook — for headless Codex sessions with no open Office app. Use when users need to produce Excel workbooks as file artifacts with formulas, formatting, source notes, model checks, and recalculation guidance in financial analysis and modeling workflows. |
 | `vertical-financial-analysis-ppt-template-creator` | `vertical-financial-analysis-ppt-template-creator` | Creates self-contained PPT template SKILLS (not presentations) from user-provided PowerPoint templates. Use ONLY when a user wants to create a reusable skill from their template. For creating actual presentations, use the pptx skill instead. Use when users need to create reusable PowerPoint templates, slide masters, layouts, formatting standards, and presentation assets in financial analysis and modeling workflows. |
 | `vertical-financial-analysis-pptx-author` | `vertical-financial-analysis-pptx-author` | Produce a .pptx file on disk (headless) instead of driving a live PowerPoint document — for headless Codex sessions with no open Office app. Use when users need to produce PowerPoint decks as file artifacts with structured slides, charts, tables, branding, and quality checks in financial analysis and modeling workflows. |

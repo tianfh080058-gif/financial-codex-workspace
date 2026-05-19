@@ -13,3 +13,6 @@ __pycache__/
 .env
 .venv/
 venv/
+
+# Proprietary / uploaded local manuals
+iFinD HTTP API 用户手册.pdf

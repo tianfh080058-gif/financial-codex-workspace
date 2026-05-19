@@ -13,6 +13,10 @@ Before selecting downstream skills, read `.agents/SKILLS_INDEX.md` to identify
 candidate skills, then read the full `SKILL.md` only for the selected router and
 downstream skills.
 
+For China market, A-share, Hong Kong-listed Chinese company, 同花顺, iFinD,
+AKShare, or Chinese disclosure tasks, use `china-market-overlay` after the
+router and before valuation, comps, earnings, or modeling downstream skills.
+
 ## Language and explanation policy
 
 - Default response language: Simplified Chinese.

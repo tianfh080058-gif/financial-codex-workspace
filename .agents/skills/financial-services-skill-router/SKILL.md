@@ -58,6 +58,30 @@ claims.
 | KYC document parsing or risk rules | operations or kyc-screener skills |
 | Macro, rates, bonds, FX, options | partner LSEG skills |
 | Tear sheets, funding digests, S&P-backed previews | partner S&P Global skills |
+| China market, A-share, 港股, 同花顺, iFinD, AKShare, Chinese disclosures | `china-market-overlay`, then `ifind-http-api` or `akshare`, then the narrow valuation, comps, earnings, or modeling skill |
+
+## China Market Routes
+
+For tasks involving A shares, 港股, Chinese listed companies, Chinese-language
+filings, RMB financials, 同花顺, iFinD, AKShare, 巨潮资讯, 上交所, 深交所, 北交所,
+港交所, or China market tickers, route in this order:
+
+1. `financial-services-skill-router`.
+2. `china-market-overlay`.
+3. A data source skill, usually `ifind-http-api` for licensed 同花顺/iFinD data or
+   `akshare` for public data prototypes and cross-checks.
+4. The narrow downstream skill:
+   - DCF or intrinsic valuation: `vertical-financial-analysis-dcf-model` plus
+     `a-share-valuation-template` for A-share companies.
+   - Comparable company analysis: `vertical-financial-analysis-comps-analysis`
+     plus `a-share-comps-best-practice`.
+   - Earnings analysis: `vertical-equity-research-earnings-analysis` with China
+     disclosure mapping from `china-market-overlay`.
+5. Supporting authoring or audit skills only when the artifact requires them.
+
+Do not force SEC, EDGAR, 10-K, or 10-Q assumptions onto China market companies.
+Map those requirements to annual reports, interim reports, quarterly reports,
+exchange disclosures, company announcements, or clearly mark the missing source.
 
 ## Required Guardrails
 
