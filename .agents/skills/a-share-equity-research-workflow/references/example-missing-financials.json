@@ -1,0 +1,107 @@
+{
+  "example_note": "Missing-data example. Keep absent financials as missing instead of inventing values.",
+  "security_master": {
+    "company_name": "云铝股份",
+    "ticker": "000807.SZ",
+    "exchange": "SZSE",
+    "board": "主板",
+    "market": "A share",
+    "currency": "CNY",
+    "listing_status": "listed",
+    "industry": {
+      "csrs": null,
+      "sw": null,
+      "citic": null,
+      "source": null
+    },
+    "identifier_status": "verified",
+    "identifier_notes": []
+  },
+  "source_log": [],
+  "financial_snapshot": {
+    "period": null,
+    "period_type": null,
+    "disclosure_date": null,
+    "currency": "CNY",
+    "unit": null,
+    "income_statement": {
+      "revenue": null,
+      "gross_profit": null,
+      "operating_profit": null,
+      "net_profit_attributable_to_parent": null
+    },
+    "cash_flow": {
+      "operating_cash_flow": null,
+      "capex": null,
+      "free_cash_flow": null
+    },
+    "balance_sheet": {
+      "cash": null,
+      "debt": null,
+      "equity_attributable_to_parent": null
+    },
+    "source_ref": [],
+    "missing_data": [
+      "Latest annual report or quarterly report not provided.",
+      "Disclosure date not verified.",
+      "Financial statement unit not verified."
+    ]
+  },
+  "valuation_snapshot": {
+    "trade_date": null,
+    "retrieved_at": null,
+    "currency": "CNY",
+    "multiples": {
+      "pe_ttm": null,
+      "pb": null,
+      "ps": null,
+      "pcf": null,
+      "ev_ebitda": null
+    },
+    "historical_percentiles": {
+      "pe_ttm_1y": null,
+      "pb_3y": null
+    },
+    "peer_context": {
+      "peer_median_pe_ttm": null,
+      "peer_median_pb": null,
+      "valid_peer_count": null
+    },
+    "not_meaningful": [],
+    "missing_data": [
+      "Market data, denominators, and peer set not sourced."
+    ],
+    "source_ref": []
+  },
+  "qa_status": {
+    "ticker_verified": true,
+    "exchange_verified": true,
+    "currency_unit_checked": false,
+    "adjustment_basis_checked": false,
+    "trade_date_present": false,
+    "retrieved_at_present": false,
+    "source_log_present": false,
+    "cross_source_check": {
+      "performed": false,
+      "sources": [],
+      "differences": []
+    },
+    "missing_data": [
+      "source_log",
+      "market_snapshot",
+      "financial_snapshot values",
+      "valuation_snapshot values",
+      "peer_set",
+      "thesis_tracker"
+    ],
+    "assumptions": [],
+    "not_investment_advice_included": true,
+    "unsupported_outputs_blocked": [
+      "target price",
+      "rating",
+      "buy/sell recommendation",
+      "unsourced consensus",
+      "unsourced guidance"
+    ]
+  }
+}

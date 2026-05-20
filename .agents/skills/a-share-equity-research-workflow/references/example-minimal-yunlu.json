@@ -1,0 +1,117 @@
+{
+  "example_note": "Structure example only. Refresh all market data before using in analysis.",
+  "security_master": {
+    "company_name": "云铝股份",
+    "ticker": "000807.SZ",
+    "exchange": "SZSE",
+    "board": "主板",
+    "market": "A share",
+    "currency": "CNY",
+    "listing_status": "listed",
+    "industry": {
+      "csrs": null,
+      "sw": null,
+      "citic": null,
+      "source": null
+    },
+    "identifier_status": "verified",
+    "identifier_notes": []
+  },
+  "source_log": [
+    {
+      "source_name": "AKShare",
+      "source_type": "public_data_tool",
+      "endpoint_or_interface": "stock_zh_a_hist",
+      "parameters": {
+        "symbol": "000807",
+        "period": "daily",
+        "start_date": "20250520",
+        "end_date": "20260520",
+        "adjust": ""
+      },
+      "retrieved_at": "2026-05-20T13:38:52+08:00",
+      "trade_date": "2026-05-20",
+      "row_count": 243,
+      "fields": [
+        "日期",
+        "开盘",
+        "收盘",
+        "最高",
+        "最低",
+        "成交量",
+        "成交额",
+        "换手率"
+      ],
+      "status": "ok",
+      "limitations": [
+        "Public data upstream; refresh before reuse.",
+        "成交量 is stored with explicit volume_unit."
+      ]
+    }
+  ],
+  "market_snapshot": {
+    "trade_date": "2026-05-20",
+    "retrieved_at": "2026-05-20T13:38:52+08:00",
+    "price": {
+      "latest": 30.49,
+      "close": 30.49,
+      "previous_close": 30.01,
+      "open": 30.0,
+      "high": 30.79,
+      "low": 29.83,
+      "currency": "CNY",
+      "adjustment_basis": "unadjusted"
+    },
+    "liquidity": {
+      "volume": 502118,
+      "volume_unit": "lot",
+      "turnover_amount": 1523758557.39,
+      "turnover_amount_unit": "CNY",
+      "turnover_rate_pct": 1.45
+    },
+    "market_cap": {
+      "total_market_cap": 105738021278.45,
+      "free_float_market_cap": 105736914369.49,
+      "unit": "CNY"
+    },
+    "range": {
+      "one_year_high": 38.23,
+      "one_year_low": 14.29
+    },
+    "source_ref": [
+      "source_log[0]"
+    ],
+    "limitations": [
+      "This is an example snapshot, not reusable current market data."
+    ]
+  },
+  "qa_status": {
+    "ticker_verified": true,
+    "exchange_verified": true,
+    "currency_unit_checked": true,
+    "adjustment_basis_checked": true,
+    "trade_date_present": true,
+    "retrieved_at_present": true,
+    "source_log_present": true,
+    "cross_source_check": {
+      "performed": false,
+      "sources": [],
+      "differences": []
+    },
+    "missing_data": [
+      "financial_snapshot",
+      "valuation_snapshot",
+      "peer_set",
+      "thesis_tracker"
+    ],
+    "assumptions": [],
+    "not_investment_advice_included": true,
+    "unsupported_outputs_blocked": [
+      "target price",
+      "rating",
+      "buy/sell recommendation",
+      "unsourced consensus",
+      "unsourced guidance"
+    ]
+  }
+}

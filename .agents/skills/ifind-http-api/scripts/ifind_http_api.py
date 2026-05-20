@@ -24,6 +24,8 @@ KEYCHAIN_SERVICES = {
     "login": "financial-codex-workspace.ifind.login",
 }
 
+KEYCHAIN_ACCOUNT = "financial-codex-workspace"
+
 ENV_NAMES = {
     "refresh_token": "IFIND_REFRESH_TOKEN",
     "access_token": "IFIND_ACCESS_TOKEN",
@@ -34,12 +36,16 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def read_keychain_secret(service: str) -> str | None:
+def read_keychain_secret(service: str, account: str | None = None) -> str | None:
     if platform.system() != "Darwin":
         return None
+    command = ["security", "find-generic-password"]
+    if account:
+        command.extend(["-a", account])
+    command.extend(["-s", service, "-w"])
     try:
         proc = subprocess.run(
-            ["security", "find-generic-password", "-s", service, "-w"],
+            command,
             check=False,
             capture_output=True,
             text=True,
@@ -61,7 +67,7 @@ def read_secret(kind: str) -> str | None:
             return value
     service = KEYCHAIN_SERVICES.get(kind)
     if service:
-        return read_keychain_secret(service)
+        return read_keychain_secret(service, account=KEYCHAIN_ACCOUNT) or read_keychain_secret(service)
     return None
 
 
