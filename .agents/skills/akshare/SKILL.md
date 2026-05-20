@@ -34,6 +34,15 @@ Use this skill when a financial workflow needs public data retrieval or a reprod
    - Use named parameters.
    - Print or save the query metadata: function name, parameters, AKShare version, execution timestamp, row count, column names, and any warnings.
    - Save raw pulls separately from transformed outputs when producing files.
+   - For A-share Sina financial indicators, prefer the project wrapper:
+     ```bash
+     python3 tools/fetch_a_share_financial_indicators.py --symbol 300308
+     ```
+     This wrapper normalizes symbols such as `300308.SZ`, `SZ300308`, and
+     `300308`, checks the available Sina reporting years, and resolves
+     `start_year` before calling `stock_financial_analysis_indicator`. This
+     avoids the AKShare default `start_year="1900"` path that can silently
+     return an empty DataFrame when `1900` is not in the upstream year list.
 6. Validate the data:
    - Confirm non-empty output, expected columns, date coverage, duplicate rows, numeric parsing, units, currency, and obvious outliers.
    - Cross-check critical facts against user-provided filings or another source when the analysis is high risk.

@@ -14,5 +14,8 @@ __pycache__/
 .venv/
 venv/
 
+# Local research artifacts and proprietary notes
+.research/
+
 # Proprietary / uploaded local manuals
 iFinD HTTP API 用户手册.pdf
