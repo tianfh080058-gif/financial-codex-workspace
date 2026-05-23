@@ -1,0 +1,61 @@
+{
+  "workflow_id": "vibe_backtest_validation",
+  "title": "Vibe-Trading backtest validation",
+  "intent_triggers": [
+    "Vibe 回测",
+    "策略验证",
+    "backtest_validation",
+    "technical_breakout 回测"
+  ],
+  "required_skills": [
+    "financial-services-skill-router",
+    "a-share-research-product-workflow",
+    "trading-decision-engine",
+    "financial-output-qa-gate"
+  ],
+  "execution_order": [
+    "financial-services-skill-router",
+    "a-share-research-product-workflow",
+    "trading-decision-engine",
+    "financial-output-qa-gate"
+  ],
+  "required_inputs": [
+    "ticker",
+    "strategy",
+    "start_date",
+    "end_date"
+  ],
+  "optional_inputs": [
+    "market",
+    "local_ohlcv_file",
+    "run_vibe",
+    "source"
+  ],
+  "required_references": [
+    ".agents/references/output-contract.md",
+    ".agents/references/data-capability-registry.md",
+    ".agents/references/display-profiles.md",
+    ".agents/references/local-research-artifacts.md"
+  ],
+  "prompts": [
+    "prompts/vibe-backtest-review-zh.md"
+  ],
+  "cli_commands": [
+    "python3 -m trading_core.cli backtest --ticker 300033.SZ --strategy technical_breakout --start 2024-01-01 --end 2026-05-23"
+  ],
+  "outputs": [
+    "prepared_vibe_run",
+    "backtest_validation",
+    "source_log",
+    "qa_status",
+    "artifact_refs"
+  ],
+  "qa_gates": [
+    "financial-output-qa-gate"
+  ],
+  "display_profile": "cli_markdown",
+  "artifact_paths": [
+    ".research/backtests/*.jsonl",
+    ".research/vibe_runs/*"
+  ]
+}

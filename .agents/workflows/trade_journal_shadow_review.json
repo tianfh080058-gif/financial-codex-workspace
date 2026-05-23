@@ -1,0 +1,58 @@
+{
+  "workflow_id": "trade_journal_shadow_review",
+  "title": "Trade journal and Shadow Account review",
+  "intent_triggers": [
+    "交易记录复盘",
+    "券商成交导出分析",
+    "Shadow Account",
+    "交易行为诊断"
+  ],
+  "required_skills": [
+    "financial-services-skill-router",
+    "trade-journal-shadow-review",
+    "financial-output-qa-gate"
+  ],
+  "execution_order": [
+    "financial-services-skill-router",
+    "trade-journal-shadow-review",
+    "financial-output-qa-gate"
+  ],
+  "required_inputs": [
+    "broker_export_file"
+  ],
+  "optional_inputs": [
+    "market",
+    "fee_policy",
+    "symbol_mapping",
+    "review_period"
+  ],
+  "required_references": [
+    ".agents/references/output-contract.md",
+    ".agents/references/display-profiles.md",
+    ".agents/references/local-research-artifacts.md"
+  ],
+  "prompts": [
+    "prompts/trade-journal-shadow-review-zh.md",
+    "prompts/app-conversation-display-zh.md"
+  ],
+  "cli_commands": [
+    "python3 -m trading_core.cli journal --file uploads/trades.xlsx",
+    "python3 tools/check_research_integrity.py --input path/to/journal.json --profile journal_shadow"
+  ],
+  "outputs": [
+    "profile",
+    "behavior_diagnostics",
+    "shadow_account_profile",
+    "source_log",
+    "qa_status",
+    "artifact_refs"
+  ],
+  "qa_gates": [
+    "financial-output-qa-gate"
+  ],
+  "display_profile": "app_card",
+  "artifact_paths": [
+    ".research/journals/*.analysis.json",
+    ".research/shadow/*.shadow.json"
+  ]
+}

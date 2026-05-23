@@ -177,6 +177,88 @@ def bollinger(values: list[float], window: int = 20, width: float = 2.0) -> dict
     }
 
 
+def true_ranges(rows: list[dict[str, Any]]) -> list[float]:
+    ranges: list[float] = []
+    previous_close: float | None = None
+    for row in rows:
+        high = row["high"]
+        low = row["low"]
+        if previous_close is None:
+            ranges.append(high - low)
+        else:
+            ranges.append(max(high - low, abs(high - previous_close), abs(low - previous_close)))
+        previous_close = row["close"]
+    return ranges
+
+
+def atr(rows: list[dict[str, Any]], window: int = 14) -> float | None:
+    ranges = true_ranges(rows)
+    if len(ranges) < window:
+        return None
+    return round(sum(ranges[-window:]) / window, 4)
+
+
+def trend_slope(values: list[float], window: int = 20) -> dict[str, Any]:
+    if len(values) < window:
+        return {"window": window, "slope_per_bar": None, "slope_pct_per_bar": None, "direction": "insufficient_data"}
+    recent = values[-window:]
+    x_mean = (window - 1) / 2
+    y_mean = sum(recent) / window
+    denominator = sum((index - x_mean) ** 2 for index in range(window))
+    if denominator == 0 or y_mean == 0:
+        return {"window": window, "slope_per_bar": None, "slope_pct_per_bar": None, "direction": "insufficient_data"}
+    slope = sum((index - x_mean) * (value - y_mean) for index, value in enumerate(recent)) / denominator
+    slope_pct = slope / y_mean
+    if slope_pct > 0.001:
+        direction = "up"
+    elif slope_pct < -0.001:
+        direction = "down"
+    else:
+        direction = "flat"
+    return {
+        "window": window,
+        "slope_per_bar": round(slope, 6),
+        "slope_pct_per_bar": round(slope_pct, 6),
+        "direction": direction,
+    }
+
+
+def swing_points(rows: list[dict[str, Any]], lookback: int = 2, limit: int = 8) -> dict[str, Any]:
+    highs: list[dict[str, Any]] = []
+    lows: list[dict[str, Any]] = []
+    if len(rows) < lookback * 2 + 1:
+        return {"lookback": lookback, "swing_highs": [], "swing_lows": []}
+    for index in range(lookback, len(rows) - lookback):
+        window = rows[index - lookback : index + lookback + 1]
+        row = rows[index]
+        if row["high"] == max(item["high"] for item in window):
+            highs.append({"date": row["date"], "level": round(row["high"], 4)})
+        if row["low"] == min(item["low"] for item in window):
+            lows.append({"date": row["date"], "level": round(row["low"], 4)})
+    return {"lookback": lookback, "swing_highs": highs[-limit:], "swing_lows": lows[-limit:]}
+
+
+def cluster_levels(values: list[float], tolerance_pct: float = 0.015, max_levels: int = 5) -> list[dict[str, Any]]:
+    cleaned = sorted(value for value in values if value is not None and value > 0)
+    if not cleaned:
+        return []
+    clusters: list[list[float]] = []
+    for value in cleaned:
+        if not clusters:
+            clusters.append([value])
+            continue
+        center = sum(clusters[-1]) / len(clusters[-1])
+        if center and abs(value - center) / center <= tolerance_pct:
+            clusters[-1].append(value)
+        else:
+            clusters.append([value])
+    summarized = [
+        {"level": round(sum(cluster) / len(cluster), 4), "touch_count": len(cluster)}
+        for cluster in clusters
+    ]
+    return sorted(summarized, key=lambda item: item["touch_count"], reverse=True)[:max_levels]
+
+
 def drawdown(values: list[float], window: int) -> float | None:
     if len(values) < window:
         return None
@@ -188,14 +270,22 @@ def drawdown(values: list[float], window: int) -> float | None:
 
 def support_resistance(rows: list[dict[str, Any]], window: int = 20) -> dict[str, Any]:
     if not rows:
-        return {"support": [], "resistance": [], "method": "recent_swing_high_low"}
+        return {"support": [], "resistance": [], "clusters": {"support": [], "resistance": []}, "method": "recent_swing_high_low"}
     recent = rows[-min(window, len(rows)) :]
     support = min(row["low"] for row in recent)
     resistance = max(row["high"] for row in recent)
+    swings = swing_points(recent, lookback=2, limit=20)
+    support_candidates = [item["level"] for item in swings["swing_lows"]] or [row["low"] for row in recent]
+    resistance_candidates = [item["level"] for item in swings["swing_highs"]] or [row["high"] for row in recent]
     return {
         "support": [round(support, 4)],
         "resistance": [round(resistance, 4)],
-        "method": "recent_swing_high_low",
+        "clusters": {
+            "support": cluster_levels(support_candidates),
+            "resistance": cluster_levels(resistance_candidates),
+        },
+        "swing_points": swings,
+        "method": "recent_swing_high_low_with_clustered_touches",
     }
 
 
@@ -267,11 +357,24 @@ def period_analysis(rows: list[dict[str, Any]], timeframe: str, calculation_basi
     volume_ma20 = sma(volumes, 20)
     volume_ratio = volumes[-1] / volume_ma5 if volumes and volume_ma5 else None
     trend_summary = summarize_trend(close, rounded_ma, status)
+    atr14 = atr(rows, 14)
+    slope20 = trend_slope(closes, 20)
+    volume_confirmation = summarize_volume_confirmation(volume_ratio, status)
 
     common = {
         "status": status,
         "calculation_basis": calculation_basis,
         "bar_count": len(rows),
+        "latest_bar": {
+            "date": rows[-1]["date"],
+            "open": round(rows[-1]["open"], 4),
+            "high": round(rows[-1]["high"], 4),
+            "low": round(rows[-1]["low"], 4),
+            "close": round(rows[-1]["close"], 4),
+            "volume": round(rows[-1]["volume"], 4),
+        },
+        "atr14": atr14,
+        "trend_slope_20": slope20,
         "missing_data": missing_data,
     }
     if timeframe == "monthly":
@@ -284,6 +387,7 @@ def period_analysis(rows: list[dict[str, Any]], timeframe: str, calculation_basi
                 "drawdown_20": drawdown(closes, 20),
                 "drawdown_60": drawdown(closes, 60),
             },
+            "cross_period_use": "Monthly state is a background risk filter, not a standalone trade instruction.",
         }
     if timeframe == "weekly":
         return {
@@ -291,6 +395,7 @@ def period_analysis(rows: list[dict[str, Any]], timeframe: str, calculation_basi
             "trend_summary": trend_summary,
             "momentum_summary": summarize_momentum(macd_value, rsi(closes)),
             "volume_price_summary": summarize_volume(volume_ratio),
+            "volume_confirmation": volume_confirmation,
             "support_resistance": support_resistance(rows),
         }
     return {
@@ -313,6 +418,7 @@ def period_analysis(rows: list[dict[str, Any]], timeframe: str, calculation_basi
             "volume_ma20": round(volume_ma20, 4) if volume_ma20 is not None else None,
             "volume_ratio": round(volume_ratio, 4) if volume_ratio is not None else None,
             "volume_price_summary": summarize_volume(volume_ratio),
+            "volume_confirmation": volume_confirmation,
         },
         "relative_strength": {
             "benchmark": None,
@@ -366,6 +472,18 @@ def summarize_volume(volume_ratio: float | None) -> str:
     return "Latest volume is near recent volume average."
 
 
+def summarize_volume_confirmation(volume_ratio: float | None, status: str) -> str:
+    if volume_ratio is None:
+        return "volume_unavailable"
+    if status == "constructive" and volume_ratio >= 1.2:
+        return "trend_confirmed_by_volume"
+    if status == "deteriorating" and volume_ratio >= 1.2:
+        return "downside_pressure_confirmed_by_volume"
+    if volume_ratio <= 0.7:
+        return "weak_volume_confirmation"
+    return "volume_neutral"
+
+
 def long_term_ma_direction(ma_values: dict[str, float | None]) -> str:
     ma20 = ma_values.get("ma20")
     ma60 = ma_values.get("ma60")
@@ -395,6 +513,25 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
     rows = load_rows(Path(args.input))
     if not rows:
         raise ValueError("input has no OHLCV rows")
+    return build_technical_analysis(
+        rows,
+        ticker=args.ticker,
+        adjustment_basis=args.adjustment_basis,
+        retrieved_at=args.retrieved_at,
+        source_ref=args.source_ref or ["source_log[0]"],
+    )
+
+
+def build_technical_analysis(
+    rows: list[dict[str, Any]],
+    *,
+    ticker: str | None = None,
+    adjustment_basis: str = "unknown",
+    retrieved_at: str | None = None,
+    source_ref: list[str] | None = None,
+) -> dict[str, Any]:
+    if not rows:
+        raise ValueError("input has no OHLCV rows")
     daily = period_analysis(rows, "daily", "source_period_data")
     weekly_rows = resample(rows, "weekly")
     monthly_rows = resample(rows, "monthly")
@@ -404,8 +541,8 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
 
     result = {
         "trade_date": rows[-1]["date"],
-        "retrieved_at": args.retrieved_at or utc_now(),
-        "adjustment_basis": args.adjustment_basis,
+        "retrieved_at": retrieved_at or utc_now(),
+        "adjustment_basis": adjustment_basis,
         "calculation_basis": "source_ohlcv",
         "timeframe_weights": {
             "daily": "primary",
@@ -420,19 +557,31 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
             "daily_signal": daily.get("moving_averages", {}).get("trend_summary"),
             "weekly_confirmation": weekly.get("trend_summary"),
             "monthly_background": monthly.get("trend_summary"),
+            "alignment": cross_timeframe_alignment(statuses),
             "evidence_use": [
                 "Technical analysis is a calculation layer, not a standalone investment conclusion."
             ],
         },
-        "source_ref": args.source_ref or ["source_log[0]"],
+        "source_ref": source_ref or ["source_log[0]"],
         "limitations": [
             "Weekly and monthly bars are resampled from daily data unless a source-native period pull is supplied separately.",
             "No target price, buy/sell rating, personal position sizing, or return promise is produced.",
         ],
     }
-    if args.ticker:
-        result["ticker"] = args.ticker
+    if ticker:
+        result["ticker"] = ticker
     return result
+
+
+def cross_timeframe_alignment(statuses: list[str]) -> str:
+    known = [status for status in statuses if status != STATUS_INSUFFICIENT]
+    if len(known) < 2:
+        return "insufficient_data"
+    if known.count("constructive") >= 2 and "deteriorating" not in known:
+        return "constructive_alignment"
+    if known.count("deteriorating") >= 2 and "constructive" not in known:
+        return "deteriorating_alignment"
+    return "mixed_alignment"
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -1,0 +1,65 @@
+{
+  "workflow_id": "watchlist_daily_review",
+  "title": "Watchlist daily review",
+  "intent_triggers": [
+    "观察池复盘",
+    "每日股票池检查",
+    "watchlist daily review",
+    "批量标的研究"
+  ],
+  "required_skills": [
+    "financial-services-skill-router",
+    "china-market-overlay",
+    "a-share-equity-research-workflow",
+    "a-share-research-product-workflow",
+    "financial-output-qa-gate"
+  ],
+  "execution_order": [
+    "financial-services-skill-router",
+    "china-market-overlay",
+    "a-share-equity-research-workflow",
+    "a-share-research-product-workflow",
+    "financial-output-qa-gate"
+  ],
+  "required_inputs": [
+    "watchlist_file",
+    "review_date",
+    "analysis_mode"
+  ],
+  "optional_inputs": [
+    "market_context",
+    "local_ohlcv_folder",
+    "thesis_history",
+    "review_horizon"
+  ],
+  "required_references": [
+    ".agents/references/output-contract.md",
+    ".agents/references/data-capability-registry.md",
+    ".agents/references/display-profiles.md",
+    ".agents/references/local-research-artifacts.md",
+    ".agents/references/watchlist-management.md"
+  ],
+  "prompts": [
+    "prompts/watchlist-management-zh.md",
+    "prompts/a-share-watchlist-daily-review-zh.md",
+    "prompts/app-conversation-display-zh.md"
+  ],
+  "cli_commands": [
+    "python3 -m trading_core.cli watchlist --file .research/watchlists/default.json"
+  ],
+  "outputs": [
+    "watchlist_summary",
+    "ranked_attention_list",
+    "source_log",
+    "qa_status",
+    "artifact_refs"
+  ],
+  "qa_gates": [
+    "financial-output-qa-gate"
+  ],
+  "display_profile": "app_card",
+  "artifact_paths": [
+    ".research/watchlists/*.json",
+    ".research/runs/*.jsonl"
+  ]
+}

@@ -26,11 +26,13 @@ claims.
 3. Check data requirements. Use user-provided files, configured data providers,
    filings, or verified current sources. Do not invent financial, market,
    company, client, accounting, or regulatory data.
-4. Read `references/skill-index.md` when the best downstream skill is not
+4. For productized workflows, check `.agents/workflows/*.json` for a matching
+   workflow recipe before selecting individual downstream skills.
+5. Read `references/skill-index.md` when the best downstream skill is not
    obvious, then load the most specific matching skill under `.agents/skills/`.
-5. If multiple skills apply, use the narrowest domain skill first, then supporting
+6. If multiple skills apply, use the narrowest domain skill first, then supporting
    authoring or audit skills such as spreadsheet, presentation, or deck QA.
-6. Preserve citations, assumptions, dates, source gaps, and audit notes in the
+7. Preserve citations, assumptions, dates, source gaps, and audit notes in the
    final artifact or response.
 
 ## Index-First Skill Selection
@@ -45,10 +47,22 @@ claims.
 - If a task lacks required data, first produce a model framework, analysis
   outline, or data request checklist. Do not invent missing financial data.
 
+## Workflow Recipes
+
+- For repeatable workflows, prefer the recipe in `.agents/workflows/` and then
+  load only the skills named by that recipe.
+- Use `.agents/references/output-contract.md` as the shared schema contract for
+  cross-skill output.
+- Use `.agents/references/display-profiles.md` to decide whether the output is
+  an App card, CLI Markdown, full JSON, or audit appendix.
+- Use `financial-output-qa-gate` as the final checker for high-risk financial
+  outputs before delivery or persistence.
+
 ## Common Routes
 
 | User intent | Prefer these skill families |
 |---|---|
+| Productized A-share decision support, watchlists, Vibe backtests, alpha bench, trade journal review | `.agents/workflows/*.json`, then `a-share-research-product-workflow`, `trading-decision-engine`, `trade-journal-shadow-review`, and `financial-output-qa-gate` |
 | DCF, LBO, 3-statement, comps, model QA | financial-analysis or model-builder skills |
 | Earnings preview, earnings recap, model update | equity-research or earnings-reviewer skills |
 | Pitch deck, CIM, teaser, buyer list, process letter | investment-banking or pitch-agent skills |

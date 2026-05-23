@@ -2,7 +2,7 @@
 
 **金融任务必须先使用 `financial-services-skill-router`，再按本索引选择 downstream skills。**
 
-Total skills indexed: 125
+Total skills indexed: 128
 
 This is a lightweight routing index generated from `.agents/skills/*/SKILL.md`. It lists each skill directory, frontmatter name, and description so Codex can classify the workflow before reading detailed skill instructions.
 
@@ -10,7 +10,7 @@ This is a lightweight routing index generated from `.agents/skills/*/SKILL.md`. 
 
 | Group | Listed | Additional | Total |
 |---|---:|---:|---:|
-| Router / orchestration | 4 | 0 | 4 |
+| Router / orchestration | 7 | 0 | 7 |
 | Valuation / DCF / comps / precedents | 22 | 5 | 27 |
 | Investment banking / M&A / pitch / memo | 20 | 0 | 20 |
 | Earnings / filings / research | 16 | 0 | 16 |
@@ -23,12 +23,18 @@ This is a lightweight routing index generated from `.agents/skills/*/SKILL.md`. 
 
 ## Router / orchestration
 
+Taxonomy tags are maintained in `.agents/SKILL_TAXONOMY.md`; productized
+flows are declared in `.agents/workflows/*.json`.
+
 | Directory | Name | Description |
 |---|---|---|
 | `financial-services-skill-router` | `financial-services-skill-router` | Router for all financial services, accounting, investing, capital markets, private equity, investment banking, wealth management, fund administration, KYC, valuation, earnings, equity research, and financial modeling requests. Use when any user request involves financial analysis, financial documents, spreadsheets, presentations, market data, company analysis, transaction work, portfolio review, or regulated financial workflows, before selecting a more specific financial-services skill. |
 | `china-market-overlay` | `china-market-overlay` | Use when a financial task involves China market securities, A shares, Hong Kong-listed Chinese companies, China market data, RMB financials, Chinese disclosures, iFinD, 同花顺, AKShare, 巨潮资讯, 上交所, 深交所, 北交所, 港交所, industry classifications, adjustment basis, trading calendars, or China-specific data integrity requirements before downstream valuation, DCF, comps, earnings, equity research, or financial modeling skills. |
 | `a-share-equity-research-workflow` | `a-share-equity-research-workflow` | Use when users need A-share single-stock equity research, stock deep dives, China A-share thesis checks, technical analysis across daily/weekly/monthly OHLCV data, explicit research or decision_support modes, iFinD and AKShare cross-checks, catalyst tracking, watchlist inputs, market context, standardized A-share schemas, source capability matrices, decision support guardrails, report integrity checks, or historical thesis references without inventing financial, market, company, consensus, guidance, target-price, rating, or buy/sell data. |
 | `a-share-research-product-workflow` | `a-share-research-product-workflow` | Use when users need productized A-share research workflows in Codex, including watchlist daily reviews, market context reviews, daily/weekly/monthly technical analysis, explicit research versus decision_support mode routing, investment decision-support framing, strategy checks, local JSONL history, thesis review logs, backtest-style post reviews, report integrity checks, or .research artifact conventions while preserving source logs, QA, and no target-price/rating/buy-sell guardrails. |
+| `trading-decision-engine` | `trading-decision-engine` | Use when users need productized trading decision support, conditional buy/sell-point style planning, Vibe-Trading backtest validation, Alpha Zoo factor screening, or full-market stock monitoring through this workspace. This skill routes through financial-services-skill-router, china-market-overlay for China securities, and trading_core CLI adapters to produce source-backed decision_card, conditional_trade_plan, execution feasibility checks, source logs, QA status, and Not investment advice without target prices, ratings, personal position sizing, return promises, or unconditional trade instructions. |
+| `trade-journal-shadow-review` | `trade-journal-shadow-review` | Use when users need broker trade journal parsing, trading behavior diagnostics, FIFO roundtrip analysis, Shadow Account profile extraction, or post-trade review for 同花顺, 东方财富, 富途, generic CSV, or Excel exports. This skill uses trading_core journal adapters and Vibe-Trading-inspired Shadow Account concepts to produce win rate, profit/loss ratio, holding days, drawdown, overtrading, disposition effect, chasing momentum, anchoring, local .research artifacts, and Not investment advice without predicting returns or creating live trades. |
+| `financial-output-qa-gate` | `financial-output-qa-gate` | Use when financial, investment, trading, valuation, accounting, market-data, broker-journal, or client-facing outputs need a final QA gate before delivery or persistence. This skill checks source logs, timestamps, missing data, Not investment advice, forbidden target-price/rating/position-sizing/return-promise language, unconditional trade instructions, artifact references, and output-contract compliance without performing new analysis or inventing data. |
 
 ## Valuation / DCF / comps / precedents
 

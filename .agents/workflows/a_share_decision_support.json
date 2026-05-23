@@ -1,0 +1,69 @@
+{
+  "workflow_id": "a_share_decision_support",
+  "title": "A-share conditional decision support",
+  "intent_triggers": [
+    "A股条件化买卖点",
+    "单只股票1-4周交易决策辅助",
+    "decision_card",
+    "conditional_trade_plan"
+  ],
+  "required_skills": [
+    "financial-services-skill-router",
+    "china-market-overlay",
+    "a-share-equity-research-workflow",
+    "a-share-research-product-workflow",
+    "trading-decision-engine",
+    "financial-output-qa-gate"
+  ],
+  "execution_order": [
+    "financial-services-skill-router",
+    "china-market-overlay",
+    "a-share-equity-research-workflow",
+    "a-share-research-product-workflow",
+    "trading-decision-engine",
+    "financial-output-qa-gate"
+  ],
+  "required_inputs": [
+    "ticker",
+    "market",
+    "horizon",
+    "analysis_mode"
+  ],
+  "optional_inputs": [
+    "local_ohlcv_file",
+    "backtest_ohlcv_file",
+    "watchlist_context",
+    "event_or_fundamental_sources"
+  ],
+  "required_references": [
+    ".agents/references/output-contract.md",
+    ".agents/references/data-capability-registry.md",
+    ".agents/references/display-profiles.md",
+    ".agents/references/local-research-artifacts.md"
+  ],
+  "prompts": [
+    "prompts/trading-decision-conditional-zh.md",
+    "prompts/app-conversation-display-zh.md"
+  ],
+  "cli_commands": [
+    "python3 -m trading_core.cli decision --ticker 300033.SZ --market a_share --horizon 20d --mode conditional_strong",
+    "python3 tools/check_research_integrity.py --input path/to/record.json --profile a_share_decision"
+  ],
+  "outputs": [
+    "decision_card",
+    "conditional_trade_plan",
+    "evidence_matrix",
+    "execution_feasibility",
+    "source_log",
+    "qa_status",
+    "artifact_refs"
+  ],
+  "qa_gates": [
+    "financial-output-qa-gate"
+  ],
+  "display_profile": "app_card",
+  "artifact_paths": [
+    ".research/runs/*.jsonl",
+    ".research/reviews/*.json"
+  ]
+}

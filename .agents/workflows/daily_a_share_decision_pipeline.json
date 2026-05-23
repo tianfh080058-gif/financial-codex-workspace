@@ -1,0 +1,140 @@
+{
+  "workflow_id": "daily_a_share_decision_pipeline",
+  "title": "Daily A-share watchlist-to-decision pipeline",
+  "intent_triggers": [
+    "每日A股决策流程",
+    "观察池到交易计划",
+    "Top10 Top5 条件化决策",
+    "组合使用 watchlist deep research decision support"
+  ],
+  "required_skills": [
+    "financial-services-skill-router",
+    "china-market-overlay",
+    "a-share-equity-research-workflow",
+    "a-share-research-product-workflow",
+    "trading-decision-engine",
+    "financial-output-qa-gate"
+  ],
+  "execution_order": [
+    "financial-services-skill-router",
+    "china-market-overlay",
+    "a-share-equity-research-workflow",
+    "a-share-research-product-workflow",
+    "trading-decision-engine",
+    "financial-output-qa-gate"
+  ],
+  "subworkflows": [
+    "watchlist_daily_review",
+    "a_share_deep_research",
+    "a_share_decision_support"
+  ],
+  "required_inputs": [
+    "watchlist_file",
+    "review_date",
+    "analysis_mode"
+  ],
+  "optional_inputs": [
+    "market_context",
+    "local_ohlcv_folder",
+    "thesis_history",
+    "review_horizon",
+    "screen_top_n",
+    "deep_research_top_n",
+    "decision_horizon",
+    "evidence_gate_policy"
+  ],
+  "defaults": {
+    "screen_top_n": 10,
+    "deep_research_top_n": 5,
+    "decision_horizon": "20d",
+    "evidence_gate_policy": "standard",
+    "analysis_mode": "decision_support"
+  },
+  "pipeline_stages": [
+    {
+      "stage_id": "screen_top10",
+      "workflow": "watchlist_daily_review",
+      "purpose": "Rank the watchlist and select the Top10 attention list.",
+      "input_scope": "full_watchlist",
+      "output": "top10_watchlist"
+    },
+    {
+      "stage_id": "deep_research_top5",
+      "workflow": "a_share_deep_research",
+      "purpose": "Run deep research on the default Top5 candidates while preserving source gaps.",
+      "input_scope": "top10_watchlist[0:5]",
+      "output": "top5_deep_research"
+    },
+    {
+      "stage_id": "evidence_gate",
+      "workflow": "financial-output-qa-gate",
+      "purpose": "Allow only evidence-sufficient names into conditional decision support.",
+      "input_scope": "top5_deep_research",
+      "output": "decision_eligibility"
+    },
+    {
+      "stage_id": "conditional_decision",
+      "workflow": "a_share_decision_support",
+      "purpose": "Build conditional trade plans only for eligible candidates.",
+      "input_scope": "decision_eligibility.eligible",
+      "output": "decision_cards"
+    }
+  ],
+  "evidence_gate": {
+    "required_status_to_enter_decision_support": "sufficient",
+    "minimum_required_dimensions": [
+      "market_data",
+      "technical_daily_weekly",
+      "one_non_technical_evidence",
+      "risk_check",
+      "qa_not_fail"
+    ],
+    "allowed_statuses": [
+      "sufficient",
+      "insufficient",
+      "blocked"
+    ],
+    "blocked_routes": {
+      "insufficient": "wait_or_data_gap",
+      "blocked": "avoid_or_wait"
+    }
+  },
+  "required_references": [
+    ".agents/references/output-contract.md",
+    ".agents/references/data-capability-registry.md",
+    ".agents/references/display-profiles.md",
+    ".agents/references/local-research-artifacts.md",
+    ".agents/references/watchlist-management.md"
+  ],
+  "prompts": [
+    "prompts/watchlist-management-zh.md",
+    "prompts/daily-a-share-decision-pipeline-zh.md",
+    "prompts/app-conversation-display-zh.md"
+  ],
+  "cli_commands": [
+    "python3 -m trading_core.cli watchlist --file .research/watchlists/default.json",
+    "python3 -m trading_core.cli decision --ticker 300033.SZ --market a_share --horizon 20d --mode conditional_strong",
+    "python3 tools/check_research_integrity.py --input path/to/record.json --profile a_share_decision"
+  ],
+  "outputs": [
+    "top10_watchlist",
+    "top5_deep_research",
+    "evidence_sufficiency",
+    "decision_candidates",
+    "wait_or_data_gap",
+    "decision_cards",
+    "source_log",
+    "qa_status",
+    "artifact_refs"
+  ],
+  "qa_gates": [
+    "financial-output-qa-gate"
+  ],
+  "display_profile": "app_card",
+  "artifact_paths": [
+    ".research/watchlists/*.json",
+    ".research/runs/*.jsonl",
+    ".research/reports/YYYY-MM-DD/*.md",
+    ".research/reviews/*.json"
+  ]
+}

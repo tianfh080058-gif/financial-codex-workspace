@@ -1,5 +1,10 @@
 # Local Research Artifacts
 
+For the current global convention, read
+`.agents/references/local-research-artifacts.md` first. This file remains as the
+A-share product workflow's local companion and should not conflict with the
+global artifact contract.
+
 Use `.research/` for local productized research history. These files can contain
 personal notes, watchlists, and thesis history, so `.research/` should remain
 gitignored by default.
@@ -13,6 +18,11 @@ gitignored by default.
 | `.research/runs/*.jsonl` | Run records, sources, mode, output path, and QA status. |
 | `.research/thesis/*.jsonl` | Thesis evidence, disconfirming signals, catalysts, and state changes. |
 | `.research/backtests/*.jsonl` | Post-review records for decision-support outputs. |
+| `.research/journals/*` | Broker journal analysis records when the workflow uses trade-journal review. |
+| `.research/shadow/*` | Shadow Account profiles and review outputs. |
+| `.research/vibe_runs/*` | Generated Vibe-Trading run directories and configs. |
+| `.research/reviews/*` | 5/20/60-day follow-up reviews. |
+| `.research/sources/*` | Local source metadata or permitted copies of user-provided files. |
 
 ## Watchlist Shape
 
@@ -39,11 +49,14 @@ Each JSONL line should be a JSON object. Prefer these common fields:
 ```json
 {
   "record_type": "run",
+  "record_id": null,
   "run_id": null,
   "created_at": null,
+  "schema_version": "1.0",
   "analysis_mode": "research",
   "tickers": [],
   "source_log": [],
+  "artifact_refs": {},
   "output_path": null,
   "qa_status": {},
   "summary": null

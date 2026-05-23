@@ -12,6 +12,8 @@ from pathlib import Path
 ROOT = Path.cwd()
 SKILLS_DIR = ROOT / ".agents" / "skills"
 PROMPTS_DIR = ROOT / "prompts"
+WORKFLOWS_DIR = ROOT / ".agents" / "workflows"
+REFERENCES_DIR = ROOT / ".agents" / "references"
 
 INCOMPATIBLE_PATTERNS = [
     ("Claude Code", re.compile(r"\bClaude Code\b", re.IGNORECASE)),
@@ -105,11 +107,26 @@ def main() -> int:
     check_required_file(results, ROOT / "AGENTS.md", "AGENTS.md")
     check_required_file(results, ROOT / ".codex" / "config.toml", ".codex/config.toml")
     check_required_file(results, ROOT / ".agents" / "SKILLS_INDEX.md", ".agents/SKILLS_INDEX.md")
+    check_required_file(results, ROOT / ".agents" / "SKILL_TAXONOMY.md", ".agents/SKILL_TAXONOMY.md")
+    check_required_file(results, PROMPTS_DIR / "PROMPTS_INDEX.md", "prompts/PROMPTS_INDEX.md")
     check_required_file(
         results,
         SKILLS_DIR / "financial-services-skill-router" / "SKILL.md",
         "financial-services-skill-router",
     )
+    check_required_file(
+        results,
+        SKILLS_DIR / "financial-output-qa-gate" / "SKILL.md",
+        "financial-output-qa-gate",
+    )
+    for reference_name in (
+        "output-contract.md",
+        "data-capability-registry.md",
+        "display-profiles.md",
+        "local-research-artifacts.md",
+        "watchlist-management.md",
+    ):
+        check_required_file(results, REFERENCES_DIR / reference_name, f".agents/references/{reference_name}")
 
     skill_files = sorted(SKILLS_DIR.glob("*/SKILL.md"))
     if skill_files:
@@ -151,6 +168,12 @@ def main() -> int:
         add(results, "PASS", "prompts", f"found {len(prompt_files)} prompts/*.md files")
     else:
         add(results, "WARN", "prompts", "no prompts/*.md files found")
+
+    workflow_files = sorted(WORKFLOWS_DIR.glob("*.json"))
+    if len(workflow_files) >= 6:
+        add(results, "PASS", "workflow recipes", f"found {len(workflow_files)} .agents/workflows/*.json files")
+    else:
+        add(results, "FAIL", "workflow recipes", f"found {len(workflow_files)} workflow recipes; expected at least 6")
 
     counts = {"PASS": 0, "WARN": 0, "FAIL": 0}
     for result in results:

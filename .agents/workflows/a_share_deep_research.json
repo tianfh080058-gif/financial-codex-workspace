@@ -1,0 +1,68 @@
+{
+  "workflow_id": "a_share_deep_research",
+  "title": "A-share deep research",
+  "intent_triggers": [
+    "A股深度研究",
+    "单股基本面研究",
+    "thesis check",
+    "公司研究框架"
+  ],
+  "required_skills": [
+    "financial-services-skill-router",
+    "china-market-overlay",
+    "a-share-equity-research-workflow",
+    "a-share-research-product-workflow",
+    "financial-output-qa-gate"
+  ],
+  "execution_order": [
+    "financial-services-skill-router",
+    "china-market-overlay",
+    "a-share-equity-research-workflow",
+    "a-share-research-product-workflow",
+    "financial-output-qa-gate"
+  ],
+  "required_inputs": [
+    "ticker",
+    "company_name_or_security_master",
+    "analysis_mode"
+  ],
+  "optional_inputs": [
+    "financials",
+    "announcements",
+    "peer_set",
+    "valuation_snapshot",
+    "technical_analysis",
+    "catalysts"
+  ],
+  "required_references": [
+    ".agents/references/output-contract.md",
+    ".agents/references/data-capability-registry.md",
+    ".agents/references/display-profiles.md",
+    ".agents/references/local-research-artifacts.md"
+  ],
+  "prompts": [
+    "prompts/a-share-stock-research-zh.md",
+    "prompts/a-share-thesis-check-zh.md",
+    "prompts/a-share-report-integrity-check-zh.md"
+  ],
+  "cli_commands": [
+    "python3 tools/check_research_integrity.py --input path/to/record.json --profile a_share_decision"
+  ],
+  "outputs": [
+    "research_summary",
+    "evidence_matrix",
+    "source_capability_matrix",
+    "source_log",
+    "qa_status",
+    "artifact_refs"
+  ],
+  "qa_gates": [
+    "financial-output-qa-gate"
+  ],
+  "display_profile": "audit_appendix",
+  "artifact_paths": [
+    ".research/reports/YYYY-MM-DD/*.md",
+    ".research/runs/*.jsonl",
+    ".research/sources/*"
+  ]
+}

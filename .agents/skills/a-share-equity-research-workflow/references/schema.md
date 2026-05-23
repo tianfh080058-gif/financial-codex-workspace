@@ -20,6 +20,9 @@ only the objects needed for the user's task. `null`, `TBD`, or explicit
 | `peer_set` | Confirmed, candidate, and rejected peers with reasons. |
 | `thesis_tracker` | Thesis, evidence, disconfirming signals, catalysts, and risks. |
 | `decision_support` | Decision-support state, evidence, triggers, invalidation, and controls. |
+| `decision_card` | Concise productized decision card for horizon, setup quality, evidence, risks, and next review. |
+| `conditional_trade_plan` | Conditional trigger, invalidation, risk-control, and reduction/exit levels for decision support. |
+| `backtest_validation` | Backtest and statistical validation summary when a strategy or Vibe bridge run is sourced. |
 | `report_integrity_status` | Report completeness checks for source, date, unit, QA, and guardrails. |
 | `review_history_ref` | References to local report, thesis, run, or backtest JSONL records. |
 | `qa_status` | Data-quality checks, limitations, and investment-output guardrails. |
@@ -45,6 +48,9 @@ only the objects needed for the user's task. `null`, `TBD`, or explicit
 - Investment decision support must not include personal position sizing, target
   price, buy/sell rating, return promises, unsourced consensus, or unsourced
   guidance.
+- `conditional_trade_plan` may include concrete trigger, invalidation, and
+  risk-control levels only when they are conditional, source-backed, labeled as
+  not target prices, and paired with source gaps / QA notes.
 
 ## Schema Objects
 
@@ -85,6 +91,103 @@ not personal investment advice.
     "research mode does not output decision_state",
     "decision_support mode uses decision states, evidence, triggers, and risk controls"
   ]
+}
+```
+
+### `decision_card`
+
+Use this object in `decision_support` mode for the compact user-facing decision
+summary. It does not replace `decision_support`; it is a product layer that
+points back to evidence and source gaps.
+
+```json
+{
+  "ticker": "300033.SZ",
+  "market": "a_share",
+  "horizon": "20d",
+  "mode": "conditional_strong",
+  "decision_state": "watch_only",
+  "setup_quality": "mixed_with_source_gaps",
+  "primary_evidence": [
+    "technical_analysis overall_status=mixed and alignment=mixed_alignment"
+  ],
+  "primary_risks": [
+    "Financial, announcement, and sector evidence may be incomplete unless sourced in this run."
+  ],
+  "next_review": "Refresh market data and source gaps before relying on this decision card."
+}
+```
+
+### `conditional_trade_plan`
+
+This object supports the user's requested buy/sell-point style while preserving
+guardrails. It is allowed only in `decision_support` mode. It must not include
+unconditional instructions, personal position sizing, target prices, ratings, or
+return promises.
+
+```json
+{
+  "action_type": "conditional_entry_review",
+  "trigger_level": {
+    "value": 88.12,
+    "unit": "CNY/share",
+    "derivation": "trigger_level_from_resistance_or_atr",
+    "is_target_price": false
+  },
+  "trigger_condition": "Review only if the close holds above 88.12 with volume confirmation and no contrary event evidence.",
+  "invalidation_level": {
+    "value": 82.4,
+    "unit": "CNY/share",
+    "derivation": "nearest_support_or_risk_reference",
+    "is_target_price": false
+  },
+  "risk_control_level": {
+    "value": 81.6,
+    "unit": "CNY/share",
+    "derivation": "support_minus_atr_buffer_when_available",
+    "is_target_price": false
+  },
+  "exit_or_reduce_condition": "Review reduction or exit if price closes below 81.6, especially when weekly status also deteriorates.",
+  "time_validity": "20d",
+  "source_ref": ["source_log[1]"],
+  "assumptions": [
+    "Levels are calculated from sourced OHLCV, not from a valuation target.",
+    "No personal position sizing is included."
+  ]
+}
+```
+
+Allowed `action_type` values:
+
+- `conditional_watch`
+- `conditional_entry_review`
+- `conditional_hold_monitor`
+- `conditional_reduce_or_exit_review`
+- `conditional_avoid_or_wait`
+
+### `backtest_validation`
+
+Use this object when a sourced strategy, Vibe backtest run, or local bridge
+validation is available. Factor or backtest results are evidence, not direct
+trade recommendations.
+
+```json
+{
+  "status": "ok",
+  "engine": "vibe_trading_or_trading_core_local_validation",
+  "strategy": "technical_breakout",
+  "metrics": {
+    "sharpe": null,
+    "max_drawdown": null,
+    "win_rate": null,
+    "trade_count": null
+  },
+  "validation": {
+    "monte_carlo": null,
+    "bootstrap_sharpe_ci": null,
+    "walk_forward": null
+  },
+  "limitations": []
 }
 ```
 

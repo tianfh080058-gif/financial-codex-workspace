@@ -12,6 +12,9 @@ history, and report integrity checks.
 | Market context review | Market context path | `research` | `market_context`, `source_log`, `qa_status` |
 | Single-stock research | Single-stock research path | `research` | delegate to `a-share-equity-research-workflow` |
 | Investment decision support | Decision-support path | `decision_support` | `technical_analysis`, `decision_support`, `market_context`, evidence, triggers, invalidation, risk controls, `qa_status` |
+| Conditional strong plan | Decision-support path | `decision_support` | `decision_card`, `conditional_trade_plan`, `technical_analysis`, source logs, invalidation, risk controls, `qa_status` |
+| Vibe backtest bridge | Backtest-validation path | `decision_support` or `research` | `backtest_validation`, Vibe `run_dir`, metrics, validation limitations |
+| Trade journal / Shadow Account | Journal-review path | `research` | journal profile, behavior diagnostics, shadow profile, source limitations |
 | Strategy check | Strategy-check path | `research` or `decision_support` | selected strategy lens, `technical_analysis` for trend lens, evidence,反证, source gaps |
 | Historical review | Post-review path | `decision_support` records only | prior decision state, hindsight facts, validation notes, no return promise |
 | Report integrity check | Integrity path | selected mode | `report_integrity_status` |
@@ -42,8 +45,55 @@ history, and report integrity checks.
 4. Include `technical_analysis`; map technical signals into evidence, trigger
    conditions, invalidation conditions, and risk controls. Do not allow
    technical analysis to be the sole basis for `decision_state`.
-5. Do not produce target prices, buy/sell ratings, personal position sizing, or
+5. When the user asks for buy/sell points, use `conditional_trade_plan` rather
+   than ratings or unconditional trade instructions. Levels must be concrete,
+   source-backed, conditional, and labeled as not target prices.
+6. Do not produce target prices, buy/sell ratings, personal position sizing, or
    return promises.
+
+## Conditional Strong Plan Path
+
+Use this path when the user explicitly asks for actionable buy/sell-point style
+decision support.
+
+1. Start with sourced market data and `technical_analysis` across daily, weekly,
+   and monthly timeframes.
+2. Build `decision_card` with the allowed `decision_state`, horizon, setup
+   quality, evidence, risks, and next review.
+3. Build `conditional_trade_plan` with:
+   `action_type`, `trigger_level`, `trigger_condition`,
+   `invalidation_level`, `risk_control_level`,
+   `exit_or_reduce_condition`, `time_validity`, `source_ref`, and
+   `assumptions`.
+4. For A shares, include an execution-feasibility check for T+1, price limits,
+   100-share lots, costs, and slippage assumptions.
+5. Run the integrity checker. A failed check must be treated as a blocking QA
+   issue, not hidden.
+
+## Backtest-Validation Path
+
+Use the project `trading_core` adapter for Vibe-Trading integration.
+
+1. Generate a Vibe-compatible `run_dir` under `.research/vibe_runs/`.
+2. Write `config.json` and `code/signal_engine.py` through the adapter.
+3. Prefer iFinD-sourced OHLCV panels. Use Vibe original loaders only as
+   fallback or cross-check.
+4. Map Vibe or local bridge metrics into `backtest_validation`, including
+   Sharpe, max drawdown, win rate, Monte Carlo, Bootstrap, and Walk-Forward
+   status where available.
+5. Treat backtests as validation evidence only; never convert a backtest result
+   into a standalone security-level recommendation.
+
+## Journal-Review Path
+
+1. Parse broker CSV/XLSX exports into normalized trades.
+2. Pair closed trades FIFO and compute win rate, profit/loss ratio, holding
+   days, total PnL, and drawdown.
+3. Diagnose behavior patterns: disposition effect, overtrading, chasing
+   momentum, anchoring, and source gaps.
+4. Extract Shadow Account rules from profitable roundtrips for simulation and
+   review only.
+5. Store local artifacts under `.research/journals/` and `.research/shadow/`.
 
 ## Strategy-Check Path
 

@@ -1,0 +1,58 @@
+{
+  "workflow_id": "alpha_factor_bench",
+  "title": "Alpha factor bench",
+  "intent_triggers": [
+    "CSI300 因子筛选",
+    "Alpha Zoo",
+    "GTJA191",
+    "IC IR 因子评估"
+  ],
+  "required_skills": [
+    "financial-services-skill-router",
+    "a-share-research-product-workflow",
+    "trading-decision-engine",
+    "financial-output-qa-gate"
+  ],
+  "execution_order": [
+    "financial-services-skill-router",
+    "a-share-research-product-workflow",
+    "trading-decision-engine",
+    "financial-output-qa-gate"
+  ],
+  "required_inputs": [
+    "universe",
+    "zoo",
+    "period"
+  ],
+  "optional_inputs": [
+    "local_panel_file",
+    "industry_neutralization",
+    "rebalance_frequency"
+  ],
+  "required_references": [
+    ".agents/references/output-contract.md",
+    ".agents/references/data-capability-registry.md",
+    ".agents/references/display-profiles.md"
+  ],
+  "prompts": [
+    "prompts/alpha-factor-bench-zh.md"
+  ],
+  "cli_commands": [
+    "python3 -m trading_core.cli alpha-bench --universe csi300 --zoo gtja191 --period 2021-2026"
+  ],
+  "outputs": [
+    "factor_classification",
+    "ic",
+    "ir",
+    "positive_ic_ratio",
+    "source_log",
+    "qa_status"
+  ],
+  "qa_gates": [
+    "financial-output-qa-gate"
+  ],
+  "display_profile": "cli_markdown",
+  "artifact_paths": [
+    ".research/backtests/*.jsonl"
+  ]
+}

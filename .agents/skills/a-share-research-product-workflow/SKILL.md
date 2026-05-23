@@ -19,12 +19,20 @@ skills.
 Use for requests such as:
 
 - A-share watchlist daily reviews, daily stock analysis, or research dashboards.
+- Daily watchlist-to-decision pipelines that first screen Top10, deep-research
+  the default Top5, and send only evidence-sufficient names into conditional
+  decision support.
 - Market context reviews before single-stock analysis.
 - Daily, weekly, and monthly technical analysis in watchlists, research, and
   decision-support outputs.
 - Explicit `research` mode versus `decision_support` mode routing.
 - Investment decision-support framing without target prices, ratings, personal
   position sizing, or buy/sell recommendations.
+- Conditional strong planning with concrete trigger, invalidation, and
+  risk-control levels when the user asks for buy/sell-point style support,
+  while preserving the no target-price/rating/personal-sizing guardrails.
+- Vibe-Trading adapter workflows for backtest validation, Alpha Zoo screening,
+  trade journal review, and Shadow Account summaries through `trading_core`.
 - Strategy checks such as trend, event-driven, growth quality, valuation
   digestion, or thesis falsification.
 - Historical report references, thesis JSONL logs, and post-review/backtest
@@ -48,12 +56,33 @@ Use for requests such as:
 
 ## Reference Files
 
+- Prefer a matching workflow recipe in `.agents/workflows/` before assembling a
+  productized output manually.
+- Use `.agents/workflows/daily_a_share_decision_pipeline.json` when the user
+  wants the full watchlist -> deep research -> evidence gate -> decision support
+  loop while preserving the individual sub-workflows.
+- Read `.agents/references/output-contract.md` for shared cross-skill output
+  fields.
+- Read `.agents/references/data-capability-registry.md` before selecting iFinD,
+  AKShare, local files, or Vibe fallback sources.
+- Read `.agents/references/display-profiles.md` for App, CLI, JSON, or audit
+  presentation rules.
+- Read `.agents/references/local-research-artifacts.md` before writing
+  `.research/` artifacts.
+- Read `.agents/references/watchlist-management.md` when the task involves
+  creating, editing, grouping, or using local watchlists from Codex desktop
+  conversations.
 - Read `references/product-workflow.md` for watchlist, market context,
   decision-support, strategy-check, and historical-review paths.
 - Read `references/local-artifacts.md` before writing or reading `.research/`
   JSONL files or local Markdown reports.
+- When the output will be shown directly in the Codex app conversation and
+  `trading-decision-engine` is selected, use that skill's
+  `references/app-conversation-display.md` for the final readable layout.
 - Use the tools under `tools/` when deterministic JSONL storage, report
   integrity checks, or post-review summaries are needed.
+- Use `financial-output-qa-gate` before delivering or storing high-risk
+  decision-support, backtest, alpha, journal, or valuation-adjacent outputs.
 
 ## Core Rules
 
@@ -67,6 +96,8 @@ Use for requests such as:
   - `hold_monitor`
   - `risk_control_review`
   - `avoid_or_wait`
+- `conditional_trade_plan` is allowed only in `decision_support` mode and must
+  be conditional, sourced, and paired with invalidation and risk-control logic.
 - Do not output target prices, buy/sell ratings, personal position sizing,
   return promises, unsourced consensus, or unsourced guidance.
 - Technical analysis can support evidence, trigger conditions, invalidation
@@ -94,6 +125,11 @@ Productized outputs should include the objects relevant to the task:
 - `peer_set` when evaluated
 - `thesis_tracker` when thesis evidence is tracked
 - `decision_support` only in `decision_support` mode
+- `decision_card` only in `decision_support` mode when productized decision
+  packaging is requested
+- `conditional_trade_plan` only in `decision_support` mode when the user asks
+  for conditional trigger/risk levels
+- `backtest_validation` when a Vibe bridge or local validation run is sourced
 - `report_integrity_status`
 - `review_history_ref` when local JSONL or report files are used
 - `qa_status`
