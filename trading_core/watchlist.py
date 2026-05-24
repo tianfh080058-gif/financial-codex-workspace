@@ -394,8 +394,15 @@ def build_watchlist_result(
     ]
     screen_top_n = int(prefs.get("screen_top_n", 10))
     deep_top_n = int(prefs.get("deep_research_top_n", 5))
+    dynamic_screening = prefs.get("ranking_policy") == "dynamic_screening_first"
     top_watchlist = active_items[:screen_top_n]
-    deep_research = top_watchlist[:deep_top_n]
+    deep_research = [] if dynamic_screening else top_watchlist[:deep_top_n]
+    deep_selection_status = "pending_daily_screening" if dynamic_screening else "static_watchlist_order"
+    deep_selection_note = (
+        "Top5 深研需在每日 Top10 证据排序后确定，不按人工录入顺序或静态观察池顺序产生。"
+        if dynamic_screening
+        else "Top5 is derived from the current static watchlist order."
+    )
     group_summary = summarize_groups(items)
     qa_warnings = list(warnings or [])
     if not items:
@@ -418,11 +425,17 @@ def build_watchlist_result(
             "deep_research_top_n": deep_top_n,
             "decision_horizon": prefs.get("decision_horizon"),
             "evidence_gate_policy": prefs.get("evidence_gate_policy"),
+            "ranking_policy": prefs.get("ranking_policy", "static_watchlist_order"),
+            "top10_selection": prefs.get("top10_selection"),
+            "top5_selection": prefs.get("top5_selection"),
+            "manual_priority_usage": prefs.get("manual_priority_usage"),
         },
         "items": [display_item(item) for item in items],
         "group_summary": group_summary,
         "top_watchlist": [display_item(item) for item in top_watchlist],
         "deep_research_candidates": [display_item(item) for item in deep_research],
+        "deep_research_selection_status": deep_selection_status,
+        "deep_research_selection_note": deep_selection_note,
         "suggested_cli_commands": suggested_cli_commands(path),
         "conversation_commands": default_conversation_commands(),
         "source_log": [

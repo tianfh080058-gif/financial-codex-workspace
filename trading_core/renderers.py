@@ -255,6 +255,17 @@ def render_watchlist_markdown(payload: dict[str, Any]) -> str:
 
     summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
     qa = payload.get("qa_status") if isinstance(payload.get("qa_status"), dict) else {}
+    deep_selection_pending = payload.get("deep_research_selection_status") == "pending_daily_screening"
+    deep_selection_value = (
+        payload.get("deep_research_selection_note") or "待每日筛选后确定"
+        if deep_selection_pending
+        else ticker_list(payload.get("deep_research_candidates"))
+    )
+    daily_flow = (
+        f"先筛 Top{summary.get('screen_top_n', 10)}，再按每日证据排序确定 Top{summary.get('deep_research_top_n', 5)} 深研"
+        if deep_selection_pending
+        else f"先筛 Top{summary.get('screen_top_n', 10)}，默认深研 Top{summary.get('deep_research_top_n', 5)}"
+    )
     lines = [
         "# 观察池配置卡",
         "",
@@ -267,9 +278,10 @@ def render_watchlist_markdown(payload: dict[str, Any]) -> str:
         f"| 市场 | `{summary.get('market', 'unknown')}` |",
         f"| 标的数 | {summary.get('total_count', 0)} 个，其中活跃 {summary.get('active_count', 0)} 个 |",
         f"| 分组数 | {summary.get('group_count', 0)} |",
-        f"| 每日流程 | 先筛 Top{summary.get('screen_top_n', 10)}，默认深研 Top{summary.get('deep_research_top_n', 5)} |",
+        f"| 每日流程 | {daily_flow} |",
         f"| 决策周期 | {summary.get('decision_horizon', '20d')} |",
         f"| 证据闸门 | `{summary.get('evidence_gate_policy', 'standard')}` |",
+        f"| 排序策略 | `{summary.get('ranking_policy', 'static_watchlist_order')}` |",
         "",
         "## 标的列表",
         "",
@@ -299,7 +311,7 @@ def render_watchlist_markdown(payload: dict[str, Any]) -> str:
             "| 阶段 | 默认候选 |",
             "|---|---|",
             f"| Top{summary.get('screen_top_n', 10)} 初筛 | {ticker_list(payload.get('top_watchlist'))} |",
-            f"| Top{summary.get('deep_research_top_n', 5)} 深研 | {ticker_list(payload.get('deep_research_candidates'))} |",
+            f"| Top{summary.get('deep_research_top_n', 5)} 深研 | {deep_selection_value} |",
             "",
             "## 桌面端快捷说法",
             *bullet_list(payload.get("conversation_commands")),
