@@ -109,6 +109,16 @@ TECHNICAL_REFERENCE_TERMS = (
     "量价",
     "相对强弱",
 )
+ALLOWED_PREDICTION_MARKET_STATUSES = {"available", "no_related_markets", "source_gap"}
+ALLOWED_PREDICTION_RELEVANCE_TIERS = {"macro_regime", "sector_linked", "ticker_or_company_linked"}
+PREDICTION_MARKET_DETERMINISTIC_PHRASES = {
+    "确定会",
+    "必然会",
+    "一定会",
+    "guaranteed",
+    "certain to",
+    "must happen",
+}
 
 
 def utc_now() -> str:
@@ -329,6 +339,79 @@ def validate_decision_support(record: dict[str, Any], errors: list[str]) -> None
         errors.append("decision_support.confidence is required")
 
 
+def source_log_has_polymarket(record: dict[str, Any]) -> bool:
+    source_log = record.get("source_log")
+    if not isinstance(source_log, list):
+        return False
+    for entry in source_log:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("source_name", "")).lower()
+        endpoint = str(entry.get("endpoint_or_interface", ""))
+        params = entry.get("parameters")
+        if "polymarket" in name and endpoint and isinstance(params, dict):
+            return True
+    return False
+
+
+def has_deterministic_prediction_language(value: Any) -> bool:
+    if isinstance(value, str):
+        lower = value.lower()
+        return any(phrase in value or phrase in lower for phrase in PREDICTION_MARKET_DETERMINISTIC_PHRASES)
+    if isinstance(value, dict):
+        return any(has_deterministic_prediction_language(item) for item in value.values())
+    if isinstance(value, list):
+        return any(has_deterministic_prediction_language(item) for item in value)
+    return False
+
+
+def validate_prediction_market_context(
+    record: dict[str, Any],
+    mode: str | None,
+    errors: list[str],
+    warnings: list[str],
+) -> None:
+    if mode != "decision_support":
+        return
+    context = record.get("prediction_market_context")
+    if not isinstance(context, dict):
+        errors.append("decision_support mode requires prediction_market_context object")
+        return
+    status = context.get("status")
+    if status not in ALLOWED_PREDICTION_MARKET_STATUSES:
+        errors.append(f"prediction_market_context.status must be one of {sorted(ALLOWED_PREDICTION_MARKET_STATUSES)}")
+    if not context.get("retrieved_at"):
+        errors.append("prediction_market_context.retrieved_at is required")
+    if not isinstance(context.get("query_terms"), list):
+        errors.append("prediction_market_context.query_terms must be a list")
+    markets = context.get("selected_markets")
+    if not isinstance(markets, list):
+        errors.append("prediction_market_context.selected_markets must be a list")
+        return
+    if status == "available" and not markets:
+        errors.append("prediction_market_context.selected_markets must be non-empty when status is available")
+    if status in {"no_related_markets", "source_gap"} and markets:
+        warnings.append("prediction_market_context has selected_markets despite non-available status")
+    if status == "available" and not source_log_has_polymarket(record):
+        errors.append("available prediction_market_context requires a Polymarket source_log entry with endpoint and query parameters")
+    if has_deterministic_prediction_language(context):
+        errors.append("prediction_market_context must not present probabilities as deterministic forecasts")
+
+    for index, market in enumerate(markets):
+        if not isinstance(market, dict):
+            errors.append(f"prediction_market_context.selected_markets[{index}] must be an object")
+            continue
+        tier = market.get("relevance_tier")
+        if tier not in ALLOWED_PREDICTION_RELEVANCE_TIERS:
+            errors.append(
+                f"prediction_market_context.selected_markets[{index}].relevance_tier must be one of {sorted(ALLOWED_PREDICTION_RELEVANCE_TIERS)}"
+            )
+        if market.get("implied_probability") is None:
+            warnings.append(f"prediction_market_context.selected_markets[{index}].implied_probability is missing")
+        if not market.get("source_ref"):
+            warnings.append(f"prediction_market_context.selected_markets[{index}].source_ref is missing")
+
+
 def validate_conditional_trade_plan(record: dict[str, Any], mode: str | None, errors: list[str], warnings: list[str]) -> None:
     plan = record.get("conditional_trade_plan")
     if plan is None:
@@ -479,6 +562,7 @@ def validate_a_share_decision_record(record: dict[str, Any]) -> dict[str, Any]:
             errors.append(
                 "decision_support must map technical_analysis into evidence, triggers, invalidation, or risk controls"
             )
+        validate_prediction_market_context(record, mode, errors, warnings)
 
     validate_conditional_trade_plan(record, mode, errors, warnings)
 
@@ -508,6 +592,7 @@ def validate_a_share_decision_record(record: dict[str, Any]) -> dict[str, Any]:
                 "adjustment_basis_present": "adjustment_basis is required" not in " ".join(errors),
                 "technical_analysis_present": isinstance(record.get("technical_analysis"), dict),
                 "technical_analysis_timeframes_present": technical_timeframes_present(record),
+                "prediction_market_context_present": isinstance(record.get("prediction_market_context"), dict),
                 "qa_status_present": isinstance(record.get("qa_status"), dict),
                 "not_investment_advice_present": not_investment_advice_present(record),
             },
@@ -518,6 +603,8 @@ def validate_a_share_decision_record(record: dict[str, Any]) -> dict[str, Any]:
                 or not any(error.startswith("decision_support.") for error in errors),
                 "decision_support_has_technical_evidence": mode != "decision_support"
                 or decision_support_references_technical(record),
+                "decision_support_has_prediction_market_context": mode != "decision_support"
+                or isinstance(record.get("prediction_market_context"), dict),
                 "unsupported_outputs_blocked": not forbidden,
             },
             "errors": errors,

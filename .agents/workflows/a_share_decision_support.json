@@ -33,7 +33,10 @@
     "local_ohlcv_file",
     "backtest_ohlcv_file",
     "watchlist_context",
-    "event_or_fundamental_sources"
+    "event_or_fundamental_sources",
+    "polymarket_query_terms",
+    "polymarket_lookback_days",
+    "polymarket_max_markets"
   ],
   "required_references": [
     ".agents/references/output-contract.md",
@@ -52,6 +55,7 @@
   "outputs": [
     "decision_card",
     "conditional_trade_plan",
+    "prediction_market_context",
     "evidence_matrix",
     "execution_feasibility",
     "source_log",

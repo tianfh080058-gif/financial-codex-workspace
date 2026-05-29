@@ -6,6 +6,7 @@ from typing import Any
 
 from .common import utc_now
 from .execution_rules import build_a_share_execution_check
+from .polymarket import default_prediction_market_context
 
 
 ALLOWED_DECISION_STATES = {
@@ -30,8 +31,10 @@ def build_decision_record(
     market_snapshot: dict[str, Any] | None = None,
     missing_data: list[str] | None = None,
     backtest_validation: dict[str, Any] | None = None,
+    prediction_market_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     missing_data = missing_data or []
+    prediction_market_context = prediction_market_context or default_prediction_market_context()
     security = security_master or {
         "ticker": ticker,
         "market": market,
@@ -49,6 +52,9 @@ def build_decision_record(
         technical_analysis=technical_analysis,
         security_master=security,
     )
+    primary_evidence = summarize_primary_evidence(technical_analysis)
+    prediction_evidence = summarize_prediction_market_evidence(prediction_market_context)
+    prediction_gaps = prediction_market_gaps(prediction_market_context)
     record = {
         "created_at": utc_now(),
         "analysis_mode": {
@@ -65,6 +71,7 @@ def build_decision_record(
         "source_log": source_log,
         "market_snapshot": market_snapshot,
         "technical_analysis": technical_analysis,
+        "prediction_market_context": prediction_market_context,
         "decision_card": {
             "ticker": ticker,
             "market": market,
@@ -72,20 +79,22 @@ def build_decision_record(
             "mode": mode,
             "decision_state": state,
             "setup_quality": summarize_setup_quality(technical_analysis, missing_data),
-            "primary_evidence": summarize_primary_evidence(technical_analysis),
+            "primary_evidence": [*primary_evidence, *prediction_evidence],
             "primary_risks": [
                 "Financial, announcement, and sector evidence may be incomplete unless sourced in this run.",
                 "Technical levels must be refreshed with current market data before use.",
+                "Polymarket probabilities are auxiliary event evidence, not deterministic forecasts or trading instructions.",
             ],
             "next_review": "Refresh market data and source gaps before relying on this decision card.",
         },
         "conditional_trade_plan": plan,
         "decision_support": {
             "decision_state": state,
-            "supporting_evidence": summarize_primary_evidence(technical_analysis),
+            "supporting_evidence": [*primary_evidence, *prediction_evidence],
             "disconfirming_evidence": [
                 "Non-technical evidence is not complete unless financials, announcements, and sector context were sourced.",
                 "A technical deterioration against the invalidation/risk-control level would weaken this setup.",
+                *prediction_market_counterpoints(prediction_market_context),
             ],
             "trigger_conditions": [plan["trigger_condition"]],
             "invalidation_conditions": [
@@ -97,8 +106,8 @@ def build_decision_record(
                 "No personal position size is generated; any sizing framework must be supplied separately and reviewed.",
             ],
             "confidence": confidence_bucket(technical_analysis, missing_data),
-            "confidence_reason": "Technical analysis is included, while non-technical source gaps limit confidence.",
-            "missing_data": missing_data,
+            "confidence_reason": confidence_reason(technical_analysis, missing_data, prediction_market_context),
+            "missing_data": [*missing_data, *prediction_gaps],
         },
         "backtest_validation": backtest_validation,
         "review_horizons": [5, 20, 60],
@@ -108,13 +117,20 @@ def build_decision_record(
             "rating_blocked": True,
             "personal_position_sizing_blocked": True,
             "return_promise_blocked": True,
-            "source_gaps": missing_data,
+            "prediction_market_context_checked": prediction_market_context.get("status") in {
+                "available",
+                "no_related_markets",
+                "source_gap",
+            },
+            "prediction_market_context_status": prediction_market_context.get("status"),
+            "source_gaps": [*missing_data, *prediction_gaps],
         },
         "not_investment_advice": True,
         "limitations": [
             "Not investment advice. This output is research and decision support only.",
             "No live order is created or executed.",
             "Levels are conditional calculations from sourced OHLCV and must be refreshed before use.",
+            "Polymarket context is read-only prediction-market evidence and does not replace market data, filings, or announcements.",
         ],
     }
     if market == "a_share":
@@ -327,6 +343,77 @@ def summarize_primary_evidence(technical: dict[str, Any] | None) -> list[str]:
     return evidence
 
 
+def summarize_prediction_market_evidence(context: dict[str, Any] | None) -> list[str]:
+    if not isinstance(context, dict) or context.get("status") != "available":
+        return []
+    markets = context.get("selected_markets")
+    if not isinstance(markets, list) or not markets:
+        return []
+    evidence: list[str] = []
+    for market in markets[:3]:
+        if not isinstance(market, dict):
+            continue
+        question = market.get("question") or market.get("slug") or "unknown market"
+        tier = market.get("relevance_tier") or "unknown_relevance"
+        probability = format_probability(market.get("implied_probability"))
+        change = market.get("change") if isinstance(market.get("change"), dict) else {}
+        delta_text = format_delta(change.get("probability_delta"))
+        evidence.append(
+            "Polymarket auxiliary evidence "
+            f"({tier}): {question}; top_outcome={market.get('top_outcome') or 'N/A'}, "
+            f"implied_probability={probability}, local_probability_delta={delta_text}."
+        )
+    return evidence
+
+
+def prediction_market_counterpoints(context: dict[str, Any] | None) -> list[str]:
+    if not isinstance(context, dict):
+        return ["Polymarket macro/strongly-linked context is missing from this record."]
+    status = context.get("status")
+    if status == "available":
+        limitations = context.get("limitations")
+        if isinstance(limitations, list) and limitations:
+            return [f"Polymarket limitation: {limitations[0]}"]
+        return []
+    if status == "no_related_markets":
+        return ["No macro or strongly related Polymarket market passed the relevance filter."]
+    if status == "source_gap":
+        return ["Polymarket macro/strongly-linked evidence is unavailable and should be treated as a source gap."]
+    return [f"Polymarket context has unknown status={status}."]
+
+
+def prediction_market_gaps(context: dict[str, Any] | None) -> list[str]:
+    if not isinstance(context, dict):
+        return ["prediction_market_context missing"]
+    status = context.get("status")
+    if status == "available":
+        return []
+    if status == "no_related_markets":
+        return ["No macro or strongly related Polymarket markets were found."]
+    if status == "source_gap":
+        limitations = context.get("limitations")
+        if isinstance(limitations, list) and limitations:
+            return [f"Polymarket source gap: {limitations[0]}"]
+        return ["Polymarket source gap"]
+    return [f"Polymarket status is not recognized: {status}"]
+
+
+def confidence_reason(
+    technical: dict[str, Any] | None,
+    missing_data: list[str],
+    prediction_market_context: dict[str, Any],
+) -> str:
+    base = "Technical analysis is included." if technical else "Technical analysis is unavailable."
+    if missing_data:
+        base += " Non-technical source gaps limit confidence."
+    status = prediction_market_context.get("status")
+    if status == "available":
+        return base + " Polymarket macro/strongly-linked event probabilities are available as auxiliary evidence only."
+    if status == "no_related_markets":
+        return base + " No related Polymarket macro/event market was found, so confidence does not benefit from this evidence layer."
+    return base + " Polymarket macro/event evidence is a disclosed source gap."
+
+
 def confidence_bucket(technical: dict[str, Any] | None, missing_data: list[str]) -> str:
     if not technical:
         return "low"
@@ -334,3 +421,15 @@ def confidence_bucket(technical: dict[str, Any] | None, missing_data: list[str])
         return "low_to_medium"
     alignment = (technical.get("cross_timeframe_summary") or {}).get("alignment")
     return "medium" if alignment in {"constructive_alignment", "deteriorating_alignment"} else "low_to_medium"
+
+
+def format_probability(value: Any) -> str:
+    if isinstance(value, (int, float)):
+        return f"{value * 100:.2f}%"
+    return "N/A"
+
+
+def format_delta(value: Any) -> str:
+    if isinstance(value, (int, float)):
+        return f"{value * 100:+.2f}pp"
+    return "N/A"

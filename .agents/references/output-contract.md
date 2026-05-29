@@ -14,6 +14,7 @@ artifacts stay consistent.
 | `source_log` | Source name, endpoint/interface, parameters, retrieval time, source status, and gaps. | Every financial output using external or user data. |
 | `source_capability_matrix` | Data provider coverage, priority, fallback, known limits, and field coverage. | Data retrieval, cross-check, trading, factor, and backtest workflows. |
 | `evidence_matrix` | Structured evidence by dimension, conclusion, source reference, and missing data. | Research, decision support, journal review, and validation outputs. |
+| `prediction_market_context` | Macro and strongly linked Polymarket event-probability evidence, including relevance tier, probability/volume/liquidity changes, and source gaps. | `decision_support` workflows when auxiliary prediction-market context is enabled. |
 | `decision_card` | Concise human-facing decision-support summary. | `decision_support` workflows only. |
 | `conditional_trade_plan` | Conditional trigger, invalidation, risk-control, exit/reduce condition, time validity, source refs, and assumptions. | Only when the user asks for buy/sell-point style decision support. |
 | `qa_status` | Pass/warn/fail status, checks performed, unresolved gaps, and guardrail result. | Every productized financial output. |
@@ -32,6 +33,8 @@ must include:
 - `missing_data` or an explicit statement that no material data gaps were found.
 - `retrieved_at` or source-specific timestamp for market data and filings.
 - Clear separation between sourced facts, assumptions, and model output.
+- If Polymarket is enabled, `prediction_market_context` with status
+  `available`, `no_related_markets`, or `source_gap`.
 
 ## Decision Support Guardrails
 
@@ -56,6 +59,7 @@ follows:
 |---|---|
 | `market_snapshot`, `security_master` | `security_master` and `evidence_matrix.market` |
 | `technical_analysis` | `evidence_matrix.technical` |
+| `prediction_market_context` | `evidence_matrix.macro_event_expectations` |
 | `decision_support` | `decision_card` and `evidence_matrix` |
 | `conditional_trade_plan` | `conditional_trade_plan` |
 | `report_integrity_status`, `qa_status` | `qa_status` |

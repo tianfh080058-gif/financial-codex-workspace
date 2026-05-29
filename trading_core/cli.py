@@ -18,6 +18,7 @@ from .common import RESEARCH_ROOT, append_jsonl, print_json, write_json
 from .data import IfindFirstMarketDataProvider
 from .decision import build_decision_record
 from .journal import analyze_journal
+from .polymarket import PolymarketMacroSignalProvider, default_prediction_market_context
 from .renderers import render_markdown
 from .watchlist import (
     init_watchlist,
@@ -35,6 +36,28 @@ def emit_result(kind: str, payload: dict[str, Any], output_format: str) -> None:
         print_json(payload)
         return
     print(render_markdown(kind, payload), end="")
+
+
+def rebase_polymarket_source_refs(context: dict[str, Any], offset: int) -> None:
+    """Adjust provider-local source_log refs after appending to the record log."""
+
+    def rebase_ref(value: Any) -> Any:
+        if not isinstance(value, str) or not value.startswith("source_log[") or not value.endswith("]"):
+            return value
+        try:
+            index = int(value[len("source_log[") : -1])
+        except ValueError:
+            return value
+        return f"source_log[{index + offset}]"
+
+    refs = context.get("source_ref")
+    if isinstance(refs, list):
+        context["source_ref"] = [rebase_ref(ref) for ref in refs]
+    markets = context.get("selected_markets")
+    if isinstance(markets, list):
+        for market in markets:
+            if isinstance(market, dict) and isinstance(market.get("source_ref"), list):
+                market["source_ref"] = [rebase_ref(ref) for ref in market["source_ref"]]
 
 
 def command_decision(args: argparse.Namespace) -> int:
@@ -64,6 +87,23 @@ def command_decision(args: argparse.Namespace) -> int:
     backtest_validation = None
     if args.backtest_ohlcv:
         backtest_validation = run_local_breakout_backtest(Path(args.backtest_ohlcv))
+    prediction_market_context = default_prediction_market_context("Polymarket context was skipped or not requested.")
+    if not args.skip_polymarket:
+        poly_provider = PolymarketMacroSignalProvider()
+        poly = poly_provider.fetch_context(
+            ticker=args.ticker,
+            market=args.market,
+            security_master=security.data,
+            query_terms=args.polymarket_query,
+            max_markets=args.polymarket_max_markets,
+            lookback_days=args.polymarket_lookback_days,
+            snapshot_root=RESEARCH_ROOT / "polymarket",
+        )
+        rebase_polymarket_source_refs(poly.context, len(source_log))
+        prediction_market_context = poly.context
+        source_log.extend(poly.source_log)
+        capability = [*capability, *poly.source_capability_matrix]
+        missing_data.extend(poly.missing_data)
     record = build_decision_record(
         ticker=args.ticker,
         market=args.market,
@@ -75,6 +115,7 @@ def command_decision(args: argparse.Namespace) -> int:
         security_master=security.data,
         missing_data=missing_data,
         backtest_validation=backtest_validation,
+        prediction_market_context=prediction_market_context,
     )
     integrity = validate_record(record)
     record["report_integrity_status"] = integrity["report_integrity_status"]
@@ -201,6 +242,10 @@ def build_parser() -> argparse.ArgumentParser:
     decision.add_argument("--ohlcv", help="Optional local OHLCV JSON/CSV file")
     decision.add_argument("--backtest-ohlcv", help="Optional OHLCV file for lightweight local validation")
     decision.add_argument("--adjustment-basis", default="unknown", choices=["unadjusted", "qfq", "hfq", "unknown"])
+    decision.add_argument("--skip-polymarket", action="store_true", help="Skip Polymarket macro/event evidence retrieval")
+    decision.add_argument("--polymarket-query", action="append", help="Additional Polymarket macro or strongly linked query term")
+    decision.add_argument("--polymarket-lookback-days", type=int, default=7, help="Local snapshot change window label for Polymarket context")
+    decision.add_argument("--polymarket-max-markets", type=int, default=5, help="Maximum related Polymarket markets to keep")
     decision.add_argument("--output")
     decision.add_argument("--store", action="store_true")
     decision.add_argument("--format", default="markdown", choices=["markdown", "json"], help="Terminal output format")

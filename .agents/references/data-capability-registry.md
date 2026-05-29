@@ -13,6 +13,7 @@ or investment output.
 | 2 | User-provided files | Broker exports, OHLCV panels, models, filings, watchlists, or manually verified data. | Use when live provider is unavailable or user wants a controlled sample. |
 | 3 | AKShare | Public China market prototypes and cross-checks. | Use only with interface name, parameters, retrieval time, and source limitations. |
 | 4 | yfinance / OKX / CCXT / Vibe loader | Non-China or upstream Vibe-Trading fallback workflows. | Use when iFinD and local files cannot provide the field, and disclose fallback in `source_log`. |
+| 5 | Polymarket Gamma/CLOB public read APIs | Macro and strongly linked prediction-market probabilities, volume, liquidity, and open-interest context. | Use only as auxiliary decision-support evidence; never replace quotes, filings, announcements, or iFinD data. |
 
 ## Coverage Matrix
 
@@ -25,6 +26,7 @@ or investment output.
 | Valuation | Primary when licensed. | Allowed when sourced. | Partial fallback. | Not primary. |
 | Announcements | Primary when endpoint is available. | Allowed for uploaded disclosures. | Public fallback when interface is identified. | Not primary. |
 | Trading calendar | Primary for China markets. | Allowed for test fixtures. | Public fallback. | Limited. |
+| Macro/event prediction-market context | Not primary. | Allowed when manually sourced and timestamped. | Not primary. | Not primary; Polymarket is the auxiliary public read source. |
 
 ## Required Source Log Fields
 
@@ -38,6 +40,8 @@ Each data pull or user file must record:
 - `status`
 - `missing_fields`
 - `fallback_reason` when a lower-priority source is used
+- For Polymarket: `query`, relevance tier, implied probability, volume,
+  liquidity, open interest, retrieval timestamp, and explicit source gaps.
 
 ## Data Quality Rules
 
@@ -49,3 +53,6 @@ Each data pull or user file must record:
   before using fallback data.
 - For high-risk output, cross-check critical market data or state why a
   cross-check was not possible.
+- Polymarket probabilities are market-implied event evidence only. Do not treat
+  them as deterministic forecasts, target prices, ratings, personal sizing, or
+  unconditional trading instructions.

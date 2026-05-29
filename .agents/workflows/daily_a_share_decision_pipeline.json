@@ -41,7 +41,10 @@
     "screen_top_n",
     "deep_research_top_n",
     "decision_horizon",
-    "evidence_gate_policy"
+    "evidence_gate_policy",
+    "polymarket_query_terms",
+    "polymarket_lookback_days",
+    "polymarket_max_markets"
   ],
   "defaults": {
     "screen_top_n": 10,
@@ -85,6 +88,7 @@
     "minimum_required_dimensions": [
       "market_data",
       "technical_daily_weekly",
+      "polymarket_macro_or_source_gap",
       "one_non_technical_evidence",
       "risk_check",
       "qa_not_fail"
@@ -123,6 +127,7 @@
     "decision_candidates",
     "wait_or_data_gap",
     "decision_cards",
+    "prediction_market_context",
     "source_log",
     "qa_status",
     "artifact_refs"

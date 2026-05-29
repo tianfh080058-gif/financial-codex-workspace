@@ -31,6 +31,7 @@ def render_decision_markdown(record: dict[str, Any]) -> str:
     price = market.get("price") if isinstance(market.get("price"), dict) else {}
     integrity = record.get("report_integrity_status") or {}
     feasibility = record.get("execution_feasibility") or {}
+    prediction_market = record.get("prediction_market_context") if isinstance(record.get("prediction_market_context"), dict) else {}
 
     lines = [
         f"# 交易决策卡：{card.get('ticker') or ticker_from_record(record)}",
@@ -80,6 +81,7 @@ def render_decision_markdown(record: dict[str, Any]) -> str:
             *bullet_list((decision.get("disconfirming_evidence") or []) + (decision.get("missing_data") or [])),
         ]
     )
+    lines.extend(render_prediction_market_section(prediction_market))
     if feasibility:
         lines.extend(
             [
@@ -111,6 +113,53 @@ def render_decision_markdown(record: dict[str, Any]) -> str:
         ]
     )
     return "\n".join(lines).strip() + "\n"
+
+
+def render_prediction_market_section(context: dict[str, Any]) -> list[str]:
+    status = context.get("status", "missing")
+    lines = [
+        "",
+        "## Polymarket 宏观/事件预期",
+        "",
+        f"- 状态：`{status}`",
+    ]
+    if context.get("retrieved_at"):
+        lines.append(f"- 获取时间：{context.get('retrieved_at')}")
+    if status == "available":
+        lines.extend(
+            [
+                "",
+                "| 相关层级 | 市场 | 最高概率结果 | 隐含概率 | 本地概率变化 | 24h/7d变化 | 成交/流动性 |",
+                "|---|---|---|---:|---:|---:|---|",
+            ]
+        )
+        markets = context.get("selected_markets") if isinstance(context.get("selected_markets"), list) else []
+        for market in markets[:5]:
+            if not isinstance(market, dict):
+                continue
+            change = market.get("change") if isinstance(market.get("change"), dict) else {}
+            question = market.get("question") or market.get("slug") or "unknown"
+            if market.get("url"):
+                question = f"[{escape_table_text(question)}]({market.get('url')})"
+            else:
+                question = escape_table_text(question)
+            lines.append(
+                "| {tier} | {question} | {outcome} | {prob} | {delta} | {short} / {week} | {volume} / {liquidity} |".format(
+                    tier=market.get("relevance_tier", "unknown"),
+                    question=question,
+                    outcome=escape_table_text(market.get("top_outcome") or "N/A"),
+                    prob=format_percent(market.get("implied_probability")),
+                    delta=format_percent_delta(change.get("probability_delta")),
+                    short=format_percent_delta(market.get("probability_change_24h")),
+                    week=format_percent_delta(market.get("probability_change_7d")),
+                    volume=format_number(market.get("volume")),
+                    liquidity=format_number(market.get("liquidity")),
+                )
+            )
+    limitations = context.get("limitations")
+    if limitations:
+        lines.extend(["", "### 主要限制", *bullet_list(limitations[:3] if isinstance(limitations, list) else limitations)])
+    return lines
 
 
 def render_backtest_markdown(payload: dict[str, Any]) -> str:
@@ -357,6 +406,18 @@ def format_percent(value: Any) -> str:
     if isinstance(value, (int, float)):
         return f"{value * 100:.2f}%"
     return str(value)
+
+
+def format_percent_delta(value: Any) -> str:
+    if value is None:
+        return "N/A"
+    if isinstance(value, (int, float)):
+        return f"{value * 100:+.2f}pp"
+    return str(value)
+
+
+def escape_table_text(value: Any) -> str:
+    return str(value).replace("|", "\\|")
 
 
 def yes_no(value: Any) -> str:

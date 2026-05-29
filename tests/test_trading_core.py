@@ -14,6 +14,7 @@ from trading_core.backtest import run_local_breakout_backtest
 from trading_core.decision import build_decision_record
 from trading_core.execution_rules import build_a_share_execution_check
 from trading_core.journal import analyze_journal
+from trading_core.polymarket import PolymarketMacroSignalProvider
 from trading_core.renderers import render_markdown
 from trading_core.watchlist import (
     init_watchlist,
@@ -95,7 +96,136 @@ class TradingCoreTests(unittest.TestCase):
         self.assertIn("交易决策卡", markdown)
         self.assertIn("条件化计划", markdown)
         self.assertIn("A股执行可行性", markdown)
+        self.assertIn("Polymarket 宏观/事件预期", markdown)
         self.assertIn("Not investment advice", markdown)
+
+    def test_polymarket_provider_keeps_macro_markets_and_tracks_snapshot_delta(self) -> None:
+        state = {"probability": "0.62", "volume": "1000", "liquidity": "500"}
+
+        def transport(_url: str, _timeout: float) -> dict[str, object]:
+            return {
+                "markets": [
+                    {
+                        "id": "fed-cut-june",
+                        "question": "Will the Federal Reserve cut interest rates by June 2026?",
+                        "slug": "fed-cut-june-2026",
+                        "outcomes": '["Yes", "No"]',
+                        "outcomePrices": f'["{state["probability"]}", "0.38"]',
+                        "volume": state["volume"],
+                        "liquidity": state["liquidity"],
+                        "openInterest": "250",
+                        "endDate": "2026-06-30",
+                        "active": True,
+                        "closed": False,
+                        "resolutionSource": "Federal Reserve",
+                        "category": "Economy",
+                    }
+                ]
+            }
+
+        provider = PolymarketMacroSignalProvider(transport=transport)
+        with tempfile.TemporaryDirectory() as tmp:
+            first = provider.fetch_context(
+                ticker="300033.SZ",
+                market="a_share",
+                query_terms=["Federal Reserve"],
+                max_markets=1,
+                snapshot_root=Path(tmp),
+            )
+            state["probability"] = "0.72"
+            state["volume"] = "1300"
+            state["liquidity"] = "700"
+            second = provider.fetch_context(
+                ticker="300033.SZ",
+                market="a_share",
+                query_terms=["Federal Reserve"],
+                max_markets=1,
+                snapshot_root=Path(tmp),
+            )
+
+        self.assertEqual(first.context["status"], "available")
+        self.assertEqual(first.context["selected_markets"][0]["relevance_tier"], "macro_regime")
+        change = second.context["selected_markets"][0]["change"]
+        self.assertEqual(change["baseline_status"], "matched_local_history")
+        self.assertAlmostEqual(change["probability_delta"], 0.10)
+        self.assertEqual(change["volume_delta"], 300.0)
+
+    def test_polymarket_provider_filters_low_signal_markets(self) -> None:
+        def transport(_url: str, _timeout: float) -> dict[str, object]:
+            return {
+                "markets": [
+                    {
+                        "id": "nba-finals",
+                        "question": "Will the Lakers win the NBA finals?",
+                        "slug": "lakers-finals",
+                        "outcomes": '["Yes", "No"]',
+                        "outcomePrices": '["0.55", "0.45"]',
+                        "volume": "10000",
+                        "active": True,
+                        "closed": False,
+                    }
+                ]
+            }
+
+        provider = PolymarketMacroSignalProvider(transport=transport)
+        result = provider.fetch_context(
+            ticker="300033.SZ",
+            market="a_share",
+            query_terms=["basketball"],
+            max_markets=3,
+        )
+        self.assertEqual(result.context["status"], "no_related_markets")
+        self.assertEqual(result.context["selected_markets"], [])
+
+    def test_decision_record_with_polymarket_context_passes_integrity(self) -> None:
+        def transport(_url: str, _timeout: float) -> dict[str, object]:
+            return {
+                "markets": [
+                    {
+                        "id": "tariff-policy",
+                        "question": "Will US tariff policy against China tighten before July 2026?",
+                        "slug": "us-china-tariffs-july-2026",
+                        "outcomes": '["Yes", "No"]',
+                        "outcomePrices": '["0.41", "0.59"]',
+                        "volume": "2100",
+                        "liquidity": "900",
+                        "active": True,
+                        "closed": False,
+                        "category": "Politics",
+                    }
+                ]
+            }
+
+        technical = build_technical_analysis(sample_rows(), ticker="300033.SZ", adjustment_basis="qfq")
+        poly = PolymarketMacroSignalProvider(transport=transport).fetch_context(
+            ticker="300033.SZ",
+            market="a_share",
+            query_terms=["tariffs China"],
+            max_markets=1,
+        )
+        record = build_decision_record(
+            ticker="300033.SZ",
+            market="a_share",
+            horizon="20d",
+            mode="conditional_strong",
+            technical_analysis=technical,
+            source_log=[
+                {
+                    "source_name": "unit_test",
+                    "endpoint_or_interface": "sample_rows",
+                    "retrieved_at": "2026-05-23T00:00:00Z",
+                    "status": "ok",
+                },
+                *poly.source_log,
+            ],
+            source_capability_matrix=poly.source_capability_matrix,
+            prediction_market_context=poly.context,
+        )
+        result = validate_record(record)
+        self.assertEqual(result["status"], "pass", result)
+        markdown = render_markdown("decision", record)
+        self.assertIn("Polymarket 宏观/事件预期", markdown)
+        self.assertIn("tariff", markdown.lower())
 
     def test_integrity_blocks_unconditional_trade_phrase(self) -> None:
         technical = build_technical_analysis(sample_rows(), ticker="300033.SZ", adjustment_basis="qfq")
