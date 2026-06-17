@@ -147,6 +147,13 @@ def run_local_breakout_backtest(ohlcv_path: Path) -> dict[str, Any]:
     sharpe = annualized_sharpe(returns)
     wins = [ret for ret in returns if ret > 0]
     losses = [ret for ret in returns if ret < 0]
+    professional_checks = build_professional_backtest_checks(rows, trades)
+    untradable_reasons = [
+        reason
+        for check in professional_checks["checks"]
+        if check.get("status") in {"source_gap", "warn"}
+        for reason in check.get("limitations", [])
+    ]
     return {
         "status": "ok",
         "engine": "trading_core_local_validation",
@@ -159,15 +166,78 @@ def run_local_breakout_backtest(ohlcv_path: Path) -> dict[str, Any]:
             "win_rate": round(len(wins) / (len(wins) + len(losses)), 4) if wins or losses else 0.0,
             "trade_count": trades,
         },
+        "professional_validation": professional_checks,
+        "untradable_reasons": untradable_reasons,
         "validation": {
             "monte_carlo": "not_run_local_lightweight",
             "bootstrap_sharpe_ci": "not_run_local_lightweight",
             "walk_forward": "not_run_local_lightweight",
+            "transaction_costs": professional_checks["assumptions"]["transaction_costs"],
+            "slippage": professional_checks["assumptions"]["slippage"],
+            "a_share_constraints": "checked_as_framework",
         },
         "limitations": [
             "Local validation is a lightweight bridge check; run the Vibe engine for full execution modeling.",
+            "Transaction costs, slippage, limit-up/down, suspension, and survivorship-bias checks are framework-level unless sourced from a full panel.",
             "No personal position sizing or return promise is produced.",
         ],
+    }
+
+
+def build_professional_backtest_checks(rows: list[dict[str, Any]], trade_count: int) -> dict[str, Any]:
+    zero_volume_days = sum(1 for row in rows if not row.get("volume"))
+    checks = [
+        {
+            "name": "transaction_costs",
+            "status": "warn",
+            "limitations": ["Local lightweight backtest reports gross returns; explicit commission/tax model is not applied."],
+        },
+        {
+            "name": "slippage",
+            "status": "warn",
+            "limitations": ["Slippage model is not applied; use full execution model for tradable validation."],
+        },
+        {
+            "name": "limit_up_down",
+            "status": "source_gap",
+            "limitations": ["A-share daily limit-up/down tradability was not sourced."],
+        },
+        {
+            "name": "suspension",
+            "status": "warn" if zero_volume_days else "pass",
+            "limitations": ["Zero-volume rows may indicate suspension or missing data."] if zero_volume_days else [],
+        },
+        {
+            "name": "t_plus_one",
+            "status": "pass",
+            "limitations": ["Strategy uses prior-day position for next-day return, consistent with a lightweight T+1 approximation."],
+        },
+        {
+            "name": "lot_size",
+            "status": "source_gap",
+            "limitations": ["100-share board-lot rounding is not modeled in local lightweight validation."],
+        },
+        {
+            "name": "survivorship_bias",
+            "status": "source_gap",
+            "limitations": ["Universe membership and delisted securities were not supplied."],
+        },
+        {
+            "name": "lookahead_bias",
+            "status": "pass",
+            "limitations": ["Signal uses moving average through the prior window and applies previous position to next return."],
+        },
+    ]
+    return {
+        "status": "warn" if any(check["status"] in {"warn", "source_gap"} for check in checks) else "pass",
+        "trade_count": trade_count,
+        "checks": checks,
+        "assumptions": {
+            "transaction_costs": "not_applied_local_lightweight",
+            "slippage": "not_applied_local_lightweight",
+            "price_limit_pct": "source_gap",
+            "lot_size_shares": 100,
+        },
     }
 
 

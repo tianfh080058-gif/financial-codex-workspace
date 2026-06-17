@@ -7,6 +7,12 @@ from typing import Any
 from .common import utc_now
 from .execution_rules import build_a_share_execution_check
 from .polymarket import default_prediction_market_context
+from .research_artifacts import (
+    build_company_profile,
+    build_evidence_matrix,
+    build_research_artifacts,
+    evidence_gate_status,
+)
 
 
 ALLOWED_DECISION_STATES = {
@@ -29,6 +35,12 @@ def build_decision_record(
     source_capability_matrix: list[dict[str, Any]],
     security_master: dict[str, Any] | None = None,
     market_snapshot: dict[str, Any] | None = None,
+    financial_snapshot: dict[str, Any] | None = None,
+    valuation_snapshot: dict[str, Any] | None = None,
+    announcements: list[dict[str, Any]] | None = None,
+    peer_set: dict[str, Any] | None = None,
+    capital_flow: dict[str, Any] | None = None,
+    risk_events: list[dict[str, Any]] | None = None,
     missing_data: list[str] | None = None,
     backtest_validation: dict[str, Any] | None = None,
     prediction_market_context: dict[str, Any] | None = None,
@@ -43,7 +55,20 @@ def build_decision_record(
         "identifier_notes": ["Security master was not refreshed."],
     }
     market_snapshot = market_snapshot or build_market_snapshot_from_technical(technical_analysis)
-    state = choose_decision_state(technical_analysis, missing_data)
+    company_profile = build_company_profile(security, market_snapshot=market_snapshot, missing_data=missing_data)
+    evidence_matrix = build_evidence_matrix(
+        market_snapshot=market_snapshot,
+        technical_analysis=technical_analysis,
+        financial_snapshot=financial_snapshot,
+        valuation_snapshot=valuation_snapshot,
+        announcements=announcements,
+        peer_set=peer_set,
+        capital_flow=capital_flow,
+        risk_events=risk_events,
+        source_log=source_log,
+    )
+    gate_status = evidence_gate_status(evidence_matrix)
+    state = gated_decision_state(choose_decision_state(technical_analysis, missing_data), gate_status)
     plan = build_conditional_trade_plan(
         ticker=ticker,
         market=market,
@@ -55,6 +80,14 @@ def build_decision_record(
     primary_evidence = summarize_primary_evidence(technical_analysis)
     prediction_evidence = summarize_prediction_market_evidence(prediction_market_context)
     prediction_gaps = prediction_market_gaps(prediction_market_context)
+    artifact_pack = build_research_artifacts(
+        ticker=ticker,
+        horizon=horizon,
+        company_profile=company_profile,
+        evidence_matrix=evidence_matrix,
+        technical_analysis=technical_analysis,
+        missing_data=[*missing_data, *prediction_gaps],
+    )
     record = {
         "created_at": utc_now(),
         "analysis_mode": {
@@ -69,8 +102,29 @@ def build_decision_record(
         "security_master": security,
         "source_capability_matrix": source_capability_matrix,
         "source_log": source_log,
+        "company_profile": company_profile,
         "market_snapshot": market_snapshot,
         "technical_analysis": technical_analysis,
+        "financial_snapshot": financial_snapshot or {
+            "status": "source_gap",
+            "missing_data": ["financial summary not sourced"],
+        },
+        "valuation_snapshot": valuation_snapshot or {
+            "status": "source_gap",
+            "missing_data": ["valuation percentile and multiples not sourced"],
+        },
+        "peer_set": peer_set or {
+            "status": "source_gap",
+            "missing_data": ["peer set not sourced"],
+        },
+        "evidence_matrix": evidence_matrix,
+        "evidence_sufficiency_gate": {
+            "status": gate_status,
+            "decision_support_allowed": gate_status == "decision_ready",
+            "policy": "Only market/technical evidence is not enough for high-confidence decision support.",
+            "blocking_gaps": evidence_matrix.get("blocking_gaps", []),
+        },
+        "research_artifacts": artifact_pack,
         "prediction_market_context": prediction_market_context,
         "decision_card": {
             "ticker": ticker,
@@ -81,17 +135,20 @@ def build_decision_record(
             "setup_quality": summarize_setup_quality(technical_analysis, missing_data),
             "primary_evidence": [*primary_evidence, *prediction_evidence],
             "primary_risks": [
+                "Evidence gate is research_only until at least two non-technical evidence dimensions are sourced.",
                 "Financial, announcement, and sector evidence may be incomplete unless sourced in this run.",
                 "Technical levels must be refreshed with current market data before use.",
                 "Polymarket probabilities are auxiliary event evidence, not deterministic forecasts or trading instructions.",
             ],
-            "next_review": "Refresh market data and source gaps before relying on this decision card.",
+            "next_review": next_review_for_gate(gate_status),
         },
         "conditional_trade_plan": plan,
         "decision_support": {
             "decision_state": state,
+            "evidence_sufficiency": gate_status,
             "supporting_evidence": [*primary_evidence, *prediction_evidence],
             "disconfirming_evidence": [
+                "Evidence gate blocks high-confidence decision support until non-technical evidence is sourced.",
                 "Non-technical evidence is not complete unless financials, announcements, and sector context were sourced.",
                 "A technical deterioration against the invalidation/risk-control level would weaken this setup.",
                 *prediction_market_counterpoints(prediction_market_context),
@@ -124,12 +181,14 @@ def build_decision_record(
             },
             "prediction_market_context_status": prediction_market_context.get("status"),
             "source_gaps": [*missing_data, *prediction_gaps],
+            "evidence_gate_status": gate_status,
         },
         "not_investment_advice": True,
         "limitations": [
             "Not investment advice. This output is research and decision support only.",
             "No live order is created or executed.",
             "Levels are conditional calculations from sourced OHLCV and must be refreshed before use.",
+            "Evidence matrix dimensions with source_gap must be resolved before treating the output as decision-ready.",
             "Polymarket context is read-only prediction-market evidence and does not replace market data, filings, or announcements.",
         ],
     }
@@ -143,6 +202,20 @@ def build_decision_record(
             trigger_level=trigger_value,
         )
     return record
+
+
+def gated_decision_state(state: str, gate_status: str) -> str:
+    if gate_status == "decision_ready":
+        return state
+    if state in {"research_candidate", "hold_monitor"}:
+        return "watch_only"
+    return state
+
+
+def next_review_for_gate(gate_status: str) -> str:
+    if gate_status == "decision_ready":
+        return "Refresh market data and risk controls before using this decision-support card."
+    return "Resolve financials, announcements/news, valuation, sector/peer, capital-flow, or risk-event source gaps before decision-ready use."
 
 
 def choose_decision_state(technical: dict[str, Any] | None, missing_data: list[str]) -> str:

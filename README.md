@@ -5,6 +5,23 @@ workflows. It packages migrated financial-services skills, a router-first policy
 prompt templates, and validation tools so Codex can route finance tasks without
 reading every skill in full.
 
+## 日常用户怎么说
+
+优先直接用自然语言描述目标，让 `trading_core.cli run` 或 Codex 对话入口自动选择
+workflow、补齐必要输入并输出用户卡片：
+
+```bash
+python3 -m trading_core.cli run --intent "帮我看今天观察池"
+python3 -m trading_core.cli run --intent "分析这只票" --ticker 300033.SZ --skip-polymarket
+python3 -m trading_core.cli run --intent "复盘我的交易记录" --file uploads/trades.xlsx
+python3 -m trading_core.cli run --intent "回测 technical_breakout" --ticker 300033.SZ --strategy technical_breakout --start 2024-01-01 --end 2026-05-23 --dry-run
+python3 -m trading_core.cli run --intent "评估 CSI300 的 GTJA191 因子" --universe csi300 --zoo gtja191 --period 2021-2026
+```
+
+默认 Markdown 输出只展示面向用户的场景卡片；使用 `--format json` 才会展示完整
+`internal_route`、workflow、skills、source log 和机器记录。熟练用户仍可继续使用
+`decision`、`watchlist`、`brief`、`journal`、`backtest`、`alpha-bench` 等专家命令。
+
 ## Directory Structure
 
 - `AGENTS.md`  
@@ -78,8 +95,8 @@ reading every skill in full.
 1. Open the Codex desktop app.
 2. Select this project folder:
    `/Users/tianfenghua/Desktop/financial-codex-workspace`
-3. Start from `prompts/start-financial-task.md`, or use a more specific prompt
-   under `prompts/`.
+3. Say the goal naturally, or start from `prompts/start-financial-task-zh.md`
+   when you want a copyable Chinese prompt.
 4. Let Codex follow `AGENTS.md`: use the router first, read
    `.agents/SKILLS_INDEX.md`, then load only the selected downstream skills.
 
@@ -123,6 +140,7 @@ recipe.
 standalone sub-workflows while orchestrating them as:
 
 ```text
+search -> watchlist -> alerts -> brief
 watchlist_daily_review -> Top10
 a_share_deep_research -> default Top5
 evidence_sufficiency gate
@@ -160,6 +178,8 @@ available with `--format json` or saved artifacts.
 Local artifacts follow `.agents/references/local-research-artifacts.md`:
 
 - `.research/watchlists/`
+- `.research/alerts/`
+- `.research/briefs/`
 - `.research/runs/`
 - `.research/backtests/`
 - `.research/journals/`
@@ -187,18 +207,23 @@ notes, and whether the ticker enters the daily pipeline.
 Common operations:
 
 ```bash
+python3 -m trading_core.cli search --query 同花顺
 python3 -m trading_core.cli watchlist --init
 python3 -m trading_core.cli watchlist
 python3 -m trading_core.cli watchlist --add 300033.SZ --name 同花顺 --group 金融科技 --priority 1 --tag AI --tag 证券IT
 python3 -m trading_core.cli watchlist --update 300033.SZ --set status=research_candidate --set notes=关注量能确认
 python3 -m trading_core.cli watchlist --update 300033.SZ --set review.include_in_daily_pipeline=false
 python3 -m trading_core.cli watchlist --remove 300033.SZ
+python3 -m trading_core.cli alerts --add 300033.SZ --condition above --level 100 --expires 90d
+python3 -m trading_core.cli alerts --check --file .research/alerts/alerts.jsonl
+python3 -m trading_core.cli brief --watchlist .research/watchlists/default.json --store
 ```
 
 In normal Codex desktop conversations, you can say things like “查看我的默认观察池”,
-“把 300033.SZ 加入观察池，分组金融科技，优先级 1”, or “跑一下默认观察池”. The
-assistant should map those requests to the same local watchlist commands and,
-for daily usage, route through `daily_a_share_decision_pipeline`.
+“把 300033.SZ 加入观察池，分组金融科技，优先级 1”, “给 300033.SZ 添加上穿
+100 元提醒”, “生成今天的观察池摘要”, or “跑一下默认观察池”. The assistant
+should map those requests to the same local commands and, for daily usage, route
+through `daily_a_share_decision_pipeline`.
 
 ## Trading Decision Support CLI
 

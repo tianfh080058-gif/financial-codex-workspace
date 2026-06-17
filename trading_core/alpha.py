@@ -29,6 +29,23 @@ def alpha_bench_skeleton(universe: str, zoo: str, period: str) -> dict[str, Any]
         "universe": universe,
         "zoo": zoo,
         "period": period,
+        "professional_factor_diagnostics": {
+            "status": "source_gap",
+            "required_metrics": {
+                "ic": "source_gap",
+                "ir": "source_gap",
+                "quantile_returns": "source_gap",
+                "turnover": "source_gap",
+                "industry_neutrality": "source_gap",
+                "decay_curve": "source_gap",
+                "out_of_sample_stability": "source_gap",
+            },
+            "untradable_reasons": [
+                "No iFinD or Vibe factor panel was supplied.",
+                "No cost, turnover, industry-neutral, or out-of-sample validation was run.",
+                "Factor evidence must not be converted into a single-security trade instruction.",
+            ],
+        },
         "classification_thresholds": {
             "alive": "ic_mean > 0.02, ic_positive_ratio >= 0.55, |t_stat| > 2",
             "reversed": "ic_mean < -0.02 and |t_stat| > 2",

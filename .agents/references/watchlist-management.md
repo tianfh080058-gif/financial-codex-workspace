@@ -21,7 +21,7 @@ Use an object with `review_preferences` and structured ticker entries:
 
 ```json
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "name": "default",
   "market": "a_share",
   "review_preferences": {
@@ -30,6 +30,16 @@ Use an object with `review_preferences` and structured ticker entries:
     "decision_horizon": "20d",
     "evidence_gate_policy": "standard",
     "data_priority": ["iFinD", "AKShare", "user_file"]
+  },
+  "news_preferences": {
+    "enabled": false,
+    "topics": ["announcements", "market_news"],
+    "source_priority": ["official_disclosures", "iFinD", "AKShare"]
+  },
+  "source_refresh_policy": {
+    "market_data": "on_demand",
+    "announcements": "source_gap_until_configured",
+    "stale_after_minutes": 30
   },
   "tickers": [
     {
@@ -41,6 +51,17 @@ Use an object with `review_preferences` and structured ticker entries:
       "horizon": "1-4w",
       "tags": ["AI", "证券IT"],
       "notes": "关注量能确认和政策/业绩催化",
+      "alert_rules": [],
+      "news_preferences": {
+        "enabled": false,
+        "topics": ["announcements", "market_news"],
+        "source_priority": ["official_disclosures", "iFinD", "AKShare"]
+      },
+      "source_refresh_policy": {
+        "market_data": "inherit",
+        "announcements": "inherit"
+      },
+      "last_reviewed_at": null,
       "review": {
         "enabled": true,
         "include_in_daily_pipeline": true
@@ -72,11 +93,15 @@ Do not use ratings such as buy, sell, strong buy, or price targets.
 ## CLI Operations
 
 ```bash
+python3 -m trading_core.cli search --query 同花顺
 python3 -m trading_core.cli watchlist --init
 python3 -m trading_core.cli watchlist
 python3 -m trading_core.cli watchlist --add 300033.SZ --name 同花顺 --group 金融科技 --priority 1 --tag AI --tag 证券IT
 python3 -m trading_core.cli watchlist --update 300033.SZ --set status=research_candidate --set notes=关注量能确认
 python3 -m trading_core.cli watchlist --remove 300033.SZ
+python3 -m trading_core.cli alerts --add 300033.SZ --condition above --level 100 --expires 90d
+python3 -m trading_core.cli alerts --check --file .research/alerts/alerts.jsonl
+python3 -m trading_core.cli brief --watchlist .research/watchlists/default.json --store
 python3 -m trading_core.cli watchlist --format json
 ```
 
@@ -96,6 +121,10 @@ When the user asks in natural language, map to the same local commands:
 | “把 300033.SZ 状态改为 research_candidate” | Update `status`. |
 | “300033.SZ 暂时不进每日流程” | Set `review.include_in_daily_pipeline=false`. |
 | “从观察池移除 300033.SZ” | Remove ticker. |
+| “搜索同花顺并给我候选 ticker” | Run `trading_core.cli search`. |
+| “给 300033.SZ 添加上穿 100 元提醒” | Add a local `alerts` rule. |
+| “检查我的价格提醒” | Run `alerts --check`; triggered alerts are evidence, not orders. |
+| “生成今天的观察池摘要” | Run `brief --watchlist ...`; preserve source gaps. |
 | “跑一下默认观察池” | Use `daily_a_share_decision_pipeline`. |
 
 For daily decision-support use:
@@ -113,6 +142,10 @@ a_share_decision_support -> evidence-sufficient names only
 - Treat watchlist notes as user-provided context, not verified market facts.
 - Verify current prices, announcements, filings, and market data before
   investment or trading conclusions.
-- Record missing ticker suffixes as ambiguity warnings instead of guessing.
+- For six-digit A-share codes, infer common `.SH`, `.SZ`, or `.BJ` suffixes;
+  reject unsupported A-share suffixes rather than silently accepting them.
+- Price alerts are conditional monitoring records only. They are not target
+  prices, ratings, personal position sizing, return promises, or order
+  instructions.
 - Do not store position size, account balance, passwords, or tokens in
   watchlists.

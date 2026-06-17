@@ -8,7 +8,7 @@ from typing import Any
 from .common import read_json, utc_now, write_json
 
 
-WATCHLIST_SCHEMA_VERSION = "1.1"
+WATCHLIST_SCHEMA_VERSION = "1.2"
 VALID_STATUSES = {
     "watch_only",
     "research_candidate",
@@ -17,12 +17,34 @@ VALID_STATUSES = {
     "avoid_or_wait",
     "archived",
 }
+RESEARCH_STATES = {
+    "new",
+    "watch_only",
+    "research_candidate",
+    "evidence_sufficient",
+    "decision_support",
+    "review_due",
+}
 DEFAULT_REVIEW_PREFERENCES: dict[str, Any] = {
     "screen_top_n": 10,
     "deep_research_top_n": 5,
     "decision_horizon": "20d",
     "evidence_gate_policy": "standard",
     "data_priority": ["iFinD", "AKShare", "user_file"],
+}
+DEFAULT_NEWS_PREFERENCES: dict[str, Any] = {
+    "enabled": False,
+    "topics": ["announcements", "market_news"],
+    "source_priority": ["official_disclosures", "iFinD", "AKShare"],
+}
+DEFAULT_SOURCE_REFRESH_POLICY: dict[str, Any] = {
+    "market_data": "on_demand",
+    "announcements": "source_gap_until_configured",
+    "stale_after_minutes": 30,
+}
+DEFAULT_ITEM_SOURCE_REFRESH_POLICY: dict[str, Any] = {
+    "market_data": "inherit",
+    "announcements": "inherit",
 }
 SETTABLE_FIELDS = {
     "name",
@@ -35,6 +57,11 @@ SETTABLE_FIELDS = {
     "notes",
     "review.enabled",
     "review.include_in_daily_pipeline",
+    "last_reviewed_at",
+    "research_state",
+    "news_preferences.enabled",
+    "source_refresh_policy.market_data",
+    "source_refresh_policy.announcements",
 }
 
 
@@ -47,6 +74,8 @@ def default_watchlist(name: str = "default", market: str = "a_share") -> dict[st
         "created_at": now,
         "updated_at": now,
         "review_preferences": dict(DEFAULT_REVIEW_PREFERENCES),
+        "news_preferences": dict(DEFAULT_NEWS_PREFERENCES),
+        "source_refresh_policy": dict(DEFAULT_SOURCE_REFRESH_POLICY),
         "tickers": [],
         "notes": "Managed by trading_core watchlist CLI. Do not store credentials here.",
     }
@@ -235,6 +264,14 @@ def normalize_payload(raw: Any) -> tuple[dict[str, Any], list[str]]:
         if isinstance(raw.get("review_preferences"), dict):
             review_preferences.update(raw["review_preferences"])
         payload["review_preferences"] = review_preferences
+        news_preferences = dict(DEFAULT_NEWS_PREFERENCES)
+        if isinstance(raw.get("news_preferences"), dict):
+            news_preferences.update(raw["news_preferences"])
+        payload["news_preferences"] = news_preferences
+        source_refresh_policy = dict(DEFAULT_SOURCE_REFRESH_POLICY)
+        if isinstance(raw.get("source_refresh_policy"), dict):
+            source_refresh_policy.update(raw["source_refresh_policy"])
+        payload["source_refresh_policy"] = source_refresh_policy
     else:
         raise ValueError("watchlist must be a JSON array or an object with tickers")
 
@@ -258,8 +295,6 @@ def normalize_payload(raw: Any) -> tuple[dict[str, Any], list[str]]:
             continue
         seen.add(ticker)
         normalized_items.append(item)
-        if "." not in ticker:
-            warnings.append(f"ticker suffix missing or ambiguous: {ticker}")
     payload["tickers"] = sorted(normalized_items, key=lambda item: (item.get("priority", 5), item.get("ticker", "")))
     return payload, warnings
 
@@ -278,12 +313,18 @@ def normalize_item(raw_item: Any, default_market: str, now: str | None = None) -
         raise ValueError("watchlist item ticker is required")
     item["ticker"] = ticker
     item["market"] = str(item.get("market") or default_market or "a_share")
+    validate_market_ticker(item["ticker"], item["market"])
     item["group"] = str(item.get("group") or "default")
     item["priority"] = coerce_priority(item.get("priority", 5))
     item["status"] = normalize_status(item.get("status"))
+    item["research_state"] = normalize_research_state(item.get("research_state"), item["status"])
     item["horizon"] = str(item.get("horizon") or "1-4w")
     item["tags"] = normalize_tags(item.get("tags"))
     item["notes"] = str(item.get("notes") or "")
+    item["alert_rules"] = normalize_alert_rules(item.get("alert_rules"))
+    item["news_preferences"] = normalize_mapping(item.get("news_preferences"), DEFAULT_NEWS_PREFERENCES)
+    item["source_refresh_policy"] = normalize_mapping(item.get("source_refresh_policy"), DEFAULT_ITEM_SOURCE_REFRESH_POLICY)
+    item["last_reviewed_at"] = item.get("last_reviewed_at")
     item.setdefault("created_at", timestamp)
     item.setdefault("updated_at", item["created_at"])
     review = item.get("review") if isinstance(item.get("review"), dict) else {}
@@ -303,12 +344,33 @@ def normalize_ticker(value: Any) -> str:
     if "." in ticker:
         code, suffix = ticker.rsplit(".", 1)
         return f"{code.strip().upper()}.{suffix.strip().upper()}"
+    if len(ticker) == 6 and ticker.isdigit():
+        suffix = infer_a_share_suffix(ticker)
+        if suffix:
+            return f"{ticker}.{suffix}"
     return ticker.upper()
 
 
 def normalize_status(value: Any) -> str:
     status = str(value or "watch_only").strip()
-    return status if status in VALID_STATUSES else "watch_only"
+    if status not in VALID_STATUSES:
+        raise ValueError(f"unsupported watchlist status: {status}")
+    return status
+
+
+def normalize_research_state(value: Any, status: str) -> str:
+    state = str(value or status or "new").strip()
+    if state == "hold_monitor":
+        state = "decision_support"
+    if state == "risk_control_review":
+        state = "review_due"
+    if state == "avoid_or_wait":
+        state = "watch_only"
+    if state == "archived":
+        state = "watch_only"
+    if state not in RESEARCH_STATES:
+        raise ValueError(f"unsupported research_state: {state}")
+    return state
 
 
 def normalize_tags(value: Any) -> list[str]:
@@ -342,9 +404,11 @@ def coerce_field_value(field: str, value: Any) -> Any:
         return coerce_priority(value)
     if field == "status":
         return normalize_status(value)
+    if field == "research_state":
+        return normalize_research_state(value, "watch_only")
     if field == "tags":
         return normalize_tags(value)
-    if field in {"review.enabled", "review.include_in_daily_pipeline"}:
+    if field in {"review.enabled", "review.include_in_daily_pipeline", "news_preferences.enabled"}:
         return coerce_bool(value)
     return value
 
@@ -359,6 +423,20 @@ def apply_updates(item: dict[str, Any], updates: dict[str, Any]) -> None:
                 review = {}
                 item["review"] = review
             review[field.split(".", 1)[1]] = value
+            continue
+        if field.startswith("news_preferences."):
+            news = item.setdefault("news_preferences", {})
+            if not isinstance(news, dict):
+                news = {}
+                item["news_preferences"] = news
+            news[field.split(".", 1)[1]] = value
+            continue
+        if field.startswith("source_refresh_policy."):
+            policy = item.setdefault("source_refresh_policy", {})
+            if not isinstance(policy, dict):
+                policy = {}
+                item["source_refresh_policy"] = policy
+            policy[field.split(".", 1)[1]] = value
             continue
         item[field] = value
 
@@ -429,6 +507,8 @@ def build_watchlist_result(
             "top10_selection": prefs.get("top10_selection"),
             "top5_selection": prefs.get("top5_selection"),
             "manual_priority_usage": prefs.get("manual_priority_usage"),
+            "news_enabled": (payload.get("news_preferences") or {}).get("enabled"),
+            "source_refresh_policy": payload.get("source_refresh_policy"),
         },
         "items": [display_item(item) for item in items],
         "group_summary": group_summary,
@@ -438,6 +518,8 @@ def build_watchlist_result(
         "deep_research_selection_note": deep_selection_note,
         "suggested_cli_commands": suggested_cli_commands(path),
         "conversation_commands": default_conversation_commands(),
+        "news_preferences": payload.get("news_preferences"),
+        "source_refresh_policy": payload.get("source_refresh_policy"),
         "source_log": [
             {
                 "source_name": "user_watchlist_file",
@@ -462,17 +544,31 @@ def display_item(item: dict[str, Any]) -> dict[str, Any]:
         "group": item.get("group"),
         "priority": item.get("priority"),
         "status": item.get("status"),
+        "research_state": item.get("research_state"),
         "horizon": item.get("horizon"),
         "tags": item.get("tags") or [],
         "notes": item.get("notes", ""),
         "review_enabled": bool(review.get("enabled", True)),
         "include_in_daily_pipeline": bool(review.get("include_in_daily_pipeline", True)),
+        "alert_rules": item.get("alert_rules") or [],
+        "news_preferences": item.get("news_preferences") or {},
+        "source_refresh_policy": item.get("source_refresh_policy") or {},
+        "last_reviewed_at": item.get("last_reviewed_at"),
         "next_action": next_action(item),
     }
 
 
 def next_action(item: dict[str, Any]) -> str:
     status = item.get("status")
+    state = item.get("research_state")
+    if state == "evidence_sufficient":
+        return "证据已接近充分，补齐非技术证据后进入条件化决策支持"
+    if state == "decision_support":
+        return "进入条件化决策支持，复核触发、失效和风险控制"
+    if state == "review_due":
+        return "进入复盘或风险复核"
+    if state == "new":
+        return "新标的，先补公司画像和基础数据"
     if status == "research_candidate":
         return "纳入深度研究候选，证据足够后进入条件化决策"
     if status == "hold_monitor":
@@ -504,6 +600,9 @@ def suggested_cli_commands(path: Path) -> list[str]:
         f"python3 -m trading_core.cli watchlist --file {path} --add 300033.SZ --name 同花顺 --group 金融科技 --priority 1 --tag AI --tag 证券IT",
         f"python3 -m trading_core.cli watchlist --file {path} --update 300033.SZ --set status=research_candidate --set priority=1",
         f"python3 -m trading_core.cli watchlist --file {path} --remove 300033.SZ",
+        "python3 -m trading_core.cli search --query 同花顺",
+        "python3 -m trading_core.cli alerts --add 300033.SZ --condition above --level 100 --expires 90d",
+        f"python3 -m trading_core.cli brief --watchlist {path}",
     ]
 
 
@@ -513,5 +612,61 @@ def default_conversation_commands() -> list[str]:
         "把 300033.SZ 加入默认观察池，名称同花顺，分组金融科技，优先级 1，标签 AI/证券IT",
         "把 300033.SZ 的状态改为 research_candidate，并备注关注量能确认",
         "从默认观察池移除 300033.SZ",
+        "搜索同花顺并给我候选 ticker",
+        "给 300033.SZ 添加上穿 100 元提醒，有效期 90 天",
+        "生成今天的观察池摘要",
         "跑一下默认观察池：先筛 Top10，对 Top5 深研，证据足够再进入条件化决策支持",
     ]
+
+
+def infer_a_share_suffix(code: str) -> str | None:
+    if code.startswith(("60", "68", "90")):
+        return "SH"
+    if code.startswith(("00", "30", "20")):
+        return "SZ"
+    if code.startswith(("43", "83", "87", "88", "92")):
+        return "BJ"
+    return None
+
+
+def validate_market_ticker(ticker: str, market: str) -> None:
+    if market != "a_share":
+        return
+    if "." not in ticker:
+        raise ValueError(f"A-share ticker requires exchange suffix: {ticker}")
+    code, suffix = ticker.rsplit(".", 1)
+    if len(code) != 6 or not code.isdigit() or suffix not in {"SH", "SZ", "BJ"}:
+        raise ValueError(f"unsupported A-share ticker suffix: {ticker}")
+
+
+def normalize_mapping(value: Any, defaults: dict[str, Any]) -> dict[str, Any]:
+    result = dict(defaults)
+    if isinstance(value, dict):
+        result.update(value)
+    return result
+
+
+def normalize_alert_rules(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    rules: list[dict[str, Any]] = []
+    for raw_rule in value:
+        if not isinstance(raw_rule, dict):
+            continue
+        condition = str(raw_rule.get("condition") or "").strip().lower()
+        if condition not in {"above", "below"}:
+            continue
+        try:
+            level = float(raw_rule.get("level"))
+        except (TypeError, ValueError):
+            continue
+        rules.append(
+            {
+                "condition": condition,
+                "level": level,
+                "currency": raw_rule.get("currency") or "CNY",
+                "enabled": bool(raw_rule.get("enabled", True)),
+                "note": str(raw_rule.get("note") or ""),
+            }
+        )
+    return rules

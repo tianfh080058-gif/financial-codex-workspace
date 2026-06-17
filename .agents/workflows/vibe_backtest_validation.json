@@ -1,6 +1,48 @@
 {
   "workflow_id": "vibe_backtest_validation",
   "title": "Vibe-Trading backtest validation",
+  "user_entry": {
+    "scenario_id": "strategy_validation",
+    "executor": "strategy_validation",
+    "label_zh": "策略回测验证",
+    "match_terms": [
+      "回测",
+      "策略验证",
+      "backtest",
+      "Vibe",
+      "technical_breakout"
+    ],
+    "example_utterances": [
+      "回测这个 technical_breakout 策略",
+      "做一次 Vibe 回测验证",
+      "验证 300033.SZ 的策略表现"
+    ],
+    "primary_action": "准备 Vibe-Trading run_dir 并执行轻量本地验证",
+    "required_inputs_ui": [
+      {
+        "field": "ticker",
+        "label_zh": "股票代码",
+        "question_zh": "要回测哪只股票？"
+      },
+      {
+        "field": "strategy",
+        "label_zh": "策略名称",
+        "question_zh": "使用哪个策略？",
+        "default_zh": "technical_breakout"
+      },
+      {
+        "field": "start_date",
+        "label_zh": "开始日期",
+        "question_zh": "回测开始日期是什么？"
+      },
+      {
+        "field": "end_date",
+        "label_zh": "结束日期",
+        "question_zh": "回测结束日期是什么？"
+      }
+    ],
+    "default_display_profile": "cli_markdown"
+  },
   "intent_triggers": [
     "Vibe 回测",
     "策略验证",

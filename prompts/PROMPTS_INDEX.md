@@ -4,9 +4,14 @@ This index links prompt templates to workflow recipes, skills, CLI commands, and
 output/display contracts. Keep it updated when adding prompts, recipes, or
 productized CLI flows.
 
+For day-to-day users, prefer `python3 -m trading_core.cli run --intent "..."`
+or `prompts/start-financial-task-zh.md`. This file is a governance index for
+maintainers, not the primary user menu.
+
 | Prompt | Workflow Recipe | Primary Skills | CLI / Tooling | Display / Contract |
 |---|---|---|---|---|
 | `prompts/daily-a-share-decision-pipeline-zh.md` | `.agents/workflows/daily_a_share_decision_pipeline.json` | `financial-services-skill-router`, `china-market-overlay`, `a-share-equity-research-workflow`, `a-share-research-product-workflow`, `trading-decision-engine`, `financial-output-qa-gate` | `python3 -m trading_core.cli watchlist`, `python3 -m trading_core.cli decision`, `tools/check_research_integrity.py --profile a_share_decision` | `app_card`, `.agents/references/output-contract.md` |
+| `prompts/openstock-style-market-workspace-zh.md` | `.agents/workflows/watchlist_daily_review.json` | `financial-services-skill-router`, `china-market-overlay`, `a-share-research-product-workflow`, `trading-decision-engine`, `financial-output-qa-gate` | `python3 -m trading_core.cli search`, `python3 -m trading_core.cli watchlist`, `python3 -m trading_core.cli alerts`, `python3 -m trading_core.cli brief` | `app_card`, `.agents/references/output-contract.md` |
 | `prompts/watchlist-management-zh.md` | `.agents/workflows/watchlist_daily_review.json` | `financial-services-skill-router`, `china-market-overlay`, `a-share-research-product-workflow`, `financial-output-qa-gate` | `python3 -m trading_core.cli watchlist` | `app_card`, `.agents/references/watchlist-management.md` |
 | `prompts/trading-decision-conditional-zh.md` | `.agents/workflows/a_share_decision_support.json` | `financial-services-skill-router`, `china-market-overlay`, `a-share-research-product-workflow`, `trading-decision-engine`, `financial-output-qa-gate` | `python3 -m trading_core.cli decision`, `tools/check_research_integrity.py --profile a_share_decision` | `app_card`, `.agents/references/output-contract.md` |
 | `prompts/a-share-watchlist-daily-review-zh.md` | `.agents/workflows/watchlist_daily_review.json` | `financial-services-skill-router`, `china-market-overlay`, `a-share-research-product-workflow`, `financial-output-qa-gate` | `python3 -m trading_core.cli watchlist` | `app_card`, `.agents/references/output-contract.md` |

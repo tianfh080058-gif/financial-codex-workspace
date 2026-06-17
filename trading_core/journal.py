@@ -29,6 +29,8 @@ def analyze_journal(path: Path) -> dict[str, Any]:
     profile = build_profile(trades, roundtrips)
     behavior = diagnose_behavior(trades, roundtrips)
     shadow = extract_shadow_profile(roundtrips)
+    rule_review = build_rule_consistency_review(trades, roundtrips)
+    post_trade = build_post_trade_review(roundtrips, behavior, rule_review)
     analyzed_at = utc_now()
     return {
         "status": "ok",
@@ -39,6 +41,8 @@ def analyze_journal(path: Path) -> dict[str, Any]:
         "roundtrip_count": len(roundtrips),
         "profile": profile,
         "behavior_diagnostics": behavior,
+        "rule_consistency_review": rule_review,
+        "post_trade_review": post_trade,
         "shadow_account_profile": shadow,
         "source_log": [
             {
@@ -206,6 +210,9 @@ def diagnose_behavior(trades: list[dict[str, Any]], roundtrips: list[dict[str, A
     return {
         "disposition_effect": disposition_effect(roundtrips),
         "overtrading": overtrading(trades, roundtrips),
+        "cutting_winners_short": cutting_winners_short(roundtrips),
+        "holding_losers": holding_losers(roundtrips),
+        "concentration": concentration(trades),
         "chasing_momentum": {
             "severity": "needs_price_context",
             "evidence": "Requires pre-trade market data to test whether entries followed sharp short-term rises.",
@@ -214,6 +221,97 @@ def diagnose_behavior(trades: list[dict[str, Any]], roundtrips: list[dict[str, A
             "severity": "needs_review_notes",
             "evidence": "Requires user notes or reference prices to test anchoring behavior.",
         },
+    }
+
+
+def cutting_winners_short(roundtrips: list[dict[str, Any]]) -> dict[str, Any]:
+    winners = [item for item in roundtrips if item["pnl"] > 0]
+    losers = [item for item in roundtrips if item["pnl"] < 0]
+    if not winners or not losers:
+        return {"severity": "low", "evidence": "Not enough winners and losers to compare realized holding periods."}
+    winner_hold = sum(item["hold_days"] for item in winners) / len(winners)
+    loser_hold = sum(item["hold_days"] for item in losers) / len(losers)
+    severity = "high" if winner_hold < loser_hold * 0.5 else "medium" if winner_hold < loser_hold * 0.8 else "low"
+    return {
+        "severity": severity,
+        "avg_winner_hold_days": round(winner_hold, 2),
+        "avg_loser_hold_days": round(loser_hold, 2),
+        "evidence": "Winners appear to be closed materially faster than losers." if severity != "low" else "No strong winners-too-short pattern detected.",
+    }
+
+
+def holding_losers(roundtrips: list[dict[str, Any]]) -> dict[str, Any]:
+    losses = [item for item in roundtrips if item["pnl"] < 0]
+    if not losses:
+        return {"severity": "low", "evidence": "No losing closed trades were detected."}
+    avg_loss_hold = sum(item["hold_days"] for item in losses) / len(losses)
+    severity = "high" if avg_loss_hold >= 30 else "medium" if avg_loss_hold >= 10 else "low"
+    return {
+        "severity": severity,
+        "avg_loser_hold_days": round(avg_loss_hold, 2),
+        "evidence": "Losing trades show extended holding periods." if severity != "low" else "Losing trade holding periods are not extended by this simple threshold.",
+    }
+
+
+def concentration(trades: list[dict[str, Any]]) -> dict[str, Any]:
+    if not trades:
+        return {"severity": "low", "evidence": "No trades provided."}
+    counts: dict[str, int] = defaultdict(int)
+    for trade in trades:
+        counts[trade["symbol"]] += 1
+    top_symbol, top_count = max(counts.items(), key=lambda item: item[1])
+    share = top_count / len(trades)
+    severity = "high" if share >= 0.6 else "medium" if share >= 0.4 else "low"
+    return {
+        "severity": severity,
+        "top_symbol": top_symbol,
+        "top_trade_share": round(share, 4),
+        "evidence": "Trading activity is concentrated in one symbol." if severity != "low" else "Trade count is not highly concentrated by symbol.",
+    }
+
+
+def build_rule_consistency_review(trades: list[dict[str, Any]], roundtrips: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "status": "needs_plan_reference",
+        "checked_roundtrips": len(roundtrips),
+        "available_checks": [
+            "FIFO roundtrip reconstruction",
+            "holding period",
+            "realized PnL",
+            "fee-aware PnL",
+        ],
+        "missing_data": [
+            "Original conditional_trade_plan is required to test trigger/invalidation/risk-control consistency.",
+            "Trade rationale notes are required to compare actual entries/exits against plan conditions.",
+        ],
+        "preliminary_findings": [
+            "Use this output as post-trade review scaffolding until planned trigger and invalidation levels are supplied.",
+            f"Parsed {len(trades)} trades and {len(roundtrips)} closed FIFO roundtrips.",
+        ],
+    }
+
+
+def build_post_trade_review(
+    roundtrips: list[dict[str, Any]],
+    behavior: dict[str, Any],
+    rule_review: dict[str, Any],
+) -> dict[str, Any]:
+    deviations = [
+        key
+        for key, value in behavior.items()
+        if isinstance(value, dict) and value.get("severity") in {"medium", "high"}
+    ]
+    return {
+        "status": "complete" if roundtrips else "insufficient_data",
+        "entry_reason_review": "needs_trade_notes",
+        "exit_reason_review": "derived_from_fifo_pnl_only",
+        "process_deviations": deviations,
+        "rule_consistency_status": rule_review.get("status"),
+        "improvement_actions": [
+            "Attach the original conditional_trade_plan to future journal exports.",
+            "Record entry reason, invalidation condition, and exit reason for each trade.",
+            "Review medium/high behavior diagnostics before updating the next plan.",
+        ],
     }
 
 

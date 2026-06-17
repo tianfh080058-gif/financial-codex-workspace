@@ -7,6 +7,8 @@ from typing import Any
 
 
 def render_markdown(kind: str, payload: dict[str, Any]) -> str:
+    if kind == "intent":
+        return render_intent_markdown(payload)
     if kind == "decision":
         return render_decision_markdown(payload)
     if kind == "backtest":
@@ -19,13 +21,60 @@ def render_markdown(kind: str, payload: dict[str, Any]) -> str:
         return render_review_markdown(payload)
     if kind == "watchlist":
         return render_watchlist_markdown(payload)
+    if kind == "search":
+        return render_search_markdown(payload)
+    if kind == "alerts":
+        return render_alerts_markdown(payload)
+    if kind == "brief":
+        return render_brief_markdown(payload)
     return fenced_json_notice(payload)
+
+
+def render_intent_markdown(payload: dict[str, Any]) -> str:
+    entry = payload.get("user_entry") if isinstance(payload.get("user_entry"), dict) else {}
+    missing_inputs = payload.get("missing_inputs") if isinstance(payload.get("missing_inputs"), list) else []
+    machine_record = payload.get("machine_record") if isinstance(payload.get("machine_record"), dict) else {}
+    lines = [
+        f"# {entry.get('label_zh') or '用户场景'}",
+        "",
+        f"- 状态：`{payload.get('status', 'unknown')}`",
+        f"- 目标：{payload.get('user_goal', '')}",
+        f"- 识别场景：`{payload.get('scenario_id', 'unknown')}`",
+    ]
+    if missing_inputs:
+        lines.extend(["", "## 还需要你补充", ""])
+        for item in missing_inputs:
+            if isinstance(item, dict):
+                lines.append(f"- {item.get('question', item.get('field', '缺少输入'))}")
+            else:
+                lines.append(f"- {item}")
+    else:
+        lines.extend(
+            [
+                "",
+                "## 执行计划",
+                "",
+                f"- 工作流：{entry.get('primary_action') or payload.get('workflow_id', 'unknown')}",
+                f"- 默认输出：`{entry.get('default_display_profile') or payload.get('display_profile', 'app_card')}`",
+                "- 保留 source log、missing data、QA 和 Not investment advice。",
+            ]
+        )
+    if machine_record.get("missing_data"):
+        lines.extend(["", "## 数据缺口", ""])
+        for item in machine_record.get("missing_data") or []:
+            lines.append(f"- {item}")
+    lines.extend(["", "- Not investment advice: true"])
+    return "\n".join(lines).strip() + "\n"
 
 
 def render_decision_markdown(record: dict[str, Any]) -> str:
     card = record.get("decision_card") or {}
     plan = record.get("conditional_trade_plan") or {}
     decision = record.get("decision_support") or {}
+    company = record.get("company_profile") if isinstance(record.get("company_profile"), dict) else {}
+    evidence = record.get("evidence_matrix") if isinstance(record.get("evidence_matrix"), dict) else {}
+    gate = record.get("evidence_sufficiency_gate") if isinstance(record.get("evidence_sufficiency_gate"), dict) else {}
+    artifacts = record.get("research_artifacts") if isinstance(record.get("research_artifacts"), dict) else {}
     technical = record.get("technical_analysis") or {}
     market = record.get("market_snapshot") or {}
     price = market.get("price") if isinstance(market.get("price"), dict) else {}
@@ -41,10 +90,32 @@ def render_decision_markdown(record: dict[str, Any]) -> str:
         f"| 决策状态 | `{card.get('decision_state', 'unknown')}` |",
         f"| 周期 | {card.get('horizon', 'unknown')} |",
         f"| 设定质量 | {card.get('setup_quality', 'unknown')} |",
+        f"| 证据闸门 | `{gate.get('status', decision.get('evidence_sufficiency', 'unknown'))}` |",
         f"| 置信度 | {decision.get('confidence', 'unknown')} |",
         f"| 最新价/收盘 | {format_number(price.get('latest') or price.get('close'))} {price.get('currency') or ''} |",
         f"| 交易日 | {market.get('trade_date', 'unknown')} |",
         f"| QA | `{integrity.get('status', 'unknown')}` |",
+        "",
+        "## 公司画像",
+        "",
+        "| 项目 | 内容 |",
+        "|---|---|",
+        f"| 名称 | {company.get('name') or 'N/A'} |",
+        f"| 板块/交易所 | {company.get('board') or 'unknown'} / {company.get('exchange') or 'unknown'} |",
+        f"| 行业/主题 | {company.get('industry') or company.get('sector') or 'source_gap'} |",
+        f"| 上市状态 | {company.get('listing_status', 'unknown')} |",
+        "",
+        "## 证据矩阵",
+        "",
+        "| 维度 | 状态 | 摘要 |",
+        "|---|---|---|",
+        *evidence_matrix_rows(evidence),
+        "",
+        "## 证据闸门",
+        "",
+        f"- 状态：`{gate.get('status', 'unknown')}`",
+        f"- 是否允许高置信决策支持：{yes_no(gate.get('decision_support_allowed'))}",
+        *bullet_list((gate.get("blocking_gaps") or [])[:4] if isinstance(gate.get("blocking_gaps"), list) else []),
         "",
         "## 条件化计划",
         "",
@@ -81,6 +152,7 @@ def render_decision_markdown(record: dict[str, Any]) -> str:
             *bullet_list((decision.get("disconfirming_evidence") or []) + (decision.get("missing_data") or [])),
         ]
     )
+    lines.extend(render_research_artifacts_section(artifacts))
     lines.extend(render_prediction_market_section(prediction_market))
     if feasibility:
         lines.extend(
@@ -113,6 +185,42 @@ def render_decision_markdown(record: dict[str, Any]) -> str:
         ]
     )
     return "\n".join(lines).strip() + "\n"
+
+
+def evidence_matrix_rows(evidence: dict[str, Any]) -> list[str]:
+    rows = evidence.get("dimensions") if isinstance(evidence.get("dimensions"), list) else []
+    lines: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            "| {label} | `{status}` | {summary} |".format(
+                label=row.get("label") or row.get("dimension") or "unknown",
+                status=row.get("status", "unknown"),
+                summary=escape_table_text(row.get("summary", "")),
+            )
+        )
+    return lines or ["| N/A | `source_gap` | 未生成证据矩阵 |"]
+
+
+def render_research_artifacts_section(artifacts: dict[str, Any]) -> list[str]:
+    if not artifacts:
+        return []
+    tear = artifacts.get("tear_sheet") if isinstance(artifacts.get("tear_sheet"), dict) else {}
+    thesis = artifacts.get("thesis_tracker") if isinstance(artifacts.get("thesis_tracker"), dict) else {}
+    catalysts = artifacts.get("catalyst_calendar") if isinstance(artifacts.get("catalyst_calendar"), dict) else {}
+    comps = artifacts.get("comps_snapshot") if isinstance(artifacts.get("comps_snapshot"), dict) else {}
+    return [
+        "",
+        "## 专业研究产物",
+        "",
+        "| 产物 | 状态 | 下一步 |",
+        "|---|---|---|",
+        f"| A-share tear sheet | `{tear.get('technical_snapshot', {}).get('status', tear.get('status', 'framework'))}` | 补齐估值、催化剂、风险事件后可用于一页纸速览 |",
+        f"| Thesis tracker | `{thesis.get('status', 'framework')}` | 录入核心假设、验证指标和反证信号 |",
+        f"| Catalyst calendar | `{catalysts.get('status', 'source_gap')}` | 接入财报、股东会、解禁、重大公告和行业政策 |",
+        f"| 简版 comps | `{comps.get('status', 'source_gap')}` | 确认同业集合并补估值/增长/盈利/交易活跃度 |",
+    ]
 
 
 def render_prediction_market_section(context: dict[str, Any]) -> list[str]:
@@ -166,6 +274,7 @@ def render_backtest_markdown(payload: dict[str, Any]) -> str:
     prepared = payload.get("prepared_vibe_run") or {}
     validation = payload.get("backtest_validation") or {}
     metrics = validation.get("metrics") if isinstance(validation.get("metrics"), dict) else {}
+    professional = validation.get("professional_validation") if isinstance(validation.get("professional_validation"), dict) else {}
     lines = [
         "# 回测验证卡",
         "",
@@ -179,9 +288,19 @@ def render_backtest_markdown(payload: dict[str, Any]) -> str:
         f"| 最大回撤 | {format_percent(metrics.get('max_drawdown'))} |",
         f"| 胜率 | {format_percent(metrics.get('win_rate'))} |",
         f"| 交易次数 | {metrics.get('trade_count', 'unknown')} |",
+        f"| 专业验证 | `{professional.get('status', 'not_run')}` |",
         "",
         "## 验证状态",
         *bullet_list(validation.get("validation")),
+        "",
+        "## 专业交易约束",
+        "",
+        "| 检查项 | 状态 | 限制 |",
+        "|---|---|---|",
+        *professional_check_rows(professional),
+        "",
+        "## 不可交易/需补证原因",
+        *bullet_list(validation.get("untradable_reasons")),
         "",
         "<details>",
         "<summary>限制与 QA</summary>",
@@ -194,7 +313,26 @@ def render_backtest_markdown(payload: dict[str, Any]) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
+def professional_check_rows(professional: dict[str, Any]) -> list[str]:
+    checks = professional.get("checks") if isinstance(professional.get("checks"), list) else []
+    rows: list[str] = []
+    for check in checks:
+        if not isinstance(check, dict):
+            continue
+        limitations = check.get("limitations") if isinstance(check.get("limitations"), list) else []
+        rows.append(
+            "| {name} | `{status}` | {limitations} |".format(
+                name=check.get("name", "unknown"),
+                status=check.get("status", "unknown"),
+                limitations=escape_table_text("; ".join(str(item) for item in limitations) or "N/A"),
+            )
+        )
+    return rows or ["| N/A | `not_run` | N/A |"]
+
+
 def render_alpha_markdown(payload: dict[str, Any]) -> str:
+    diagnostics = payload.get("professional_factor_diagnostics") if isinstance(payload.get("professional_factor_diagnostics"), dict) else {}
+    metrics = diagnostics.get("required_metrics") if isinstance(diagnostics.get("required_metrics"), dict) else {}
     lines = [
         "# Alpha 因子筛选卡",
         "",
@@ -207,6 +345,15 @@ def render_alpha_markdown(payload: dict[str, Any]) -> str:
         "",
         "## 分类阈值",
         *bullet_list(payload.get("classification_thresholds")),
+        "",
+        "## 专业因子诊断",
+        "",
+        "| 指标 | 状态 |",
+        "|---|---|",
+        *[f"| {key} | `{value}` |" for key, value in metrics.items()],
+        "",
+        "## 不可交易/需补证原因",
+        *bullet_list(diagnostics.get("untradable_reasons")),
         "",
         "<details>",
         "<summary>数据缺口与 QA</summary>",
@@ -222,6 +369,8 @@ def render_alpha_markdown(payload: dict[str, Any]) -> str:
 def render_journal_markdown(payload: dict[str, Any]) -> str:
     profile = payload.get("profile") or {}
     behavior = payload.get("behavior_diagnostics") or {}
+    rule_review = payload.get("rule_consistency_review") if isinstance(payload.get("rule_consistency_review"), dict) else {}
+    post_trade = payload.get("post_trade_review") if isinstance(payload.get("post_trade_review"), dict) else {}
     shadow = payload.get("shadow_account_profile") or {}
     lines = [
         "# 交易日志复盘卡",
@@ -243,6 +392,15 @@ def render_journal_markdown(payload: dict[str, Any]) -> str:
             lines.append(f"- `{key}`：{value.get('severity', 'unknown')}。{value.get('evidence', '')}")
     lines.extend(
         [
+            "",
+            "## 规则一致性复盘",
+            f"- 状态：`{rule_review.get('status', 'unknown')}`",
+            *bullet_list(rule_review.get("missing_data")),
+            "",
+            "## Post-Trade Review（交易后复盘）",
+            f"- 状态：`{post_trade.get('status', 'unknown')}`",
+            f"- 规则一致性：`{post_trade.get('rule_consistency_status', 'unknown')}`",
+            *bullet_list(post_trade.get("improvement_actions")),
             "",
             "## Shadow Account",
             f"- 状态：`{shadow.get('status', 'unknown')}`",
@@ -331,21 +489,24 @@ def render_watchlist_markdown(payload: dict[str, Any]) -> str:
         f"| 决策周期 | {summary.get('decision_horizon', '20d')} |",
         f"| 证据闸门 | `{summary.get('evidence_gate_policy', 'standard')}` |",
         f"| 排序策略 | `{summary.get('ranking_policy', 'static_watchlist_order')}` |",
+        f"| 新闻偏好 | {'启用' if summary.get('news_enabled') else '未启用'} |",
+        f"| 数据刷新 | `{(summary.get('source_refresh_policy') or {}).get('market_data', 'unknown')}` |",
         "",
         "## 标的列表",
         "",
-        "| 优先级 | Ticker | 名称 | 分组 | 状态 | 周期 | 标签 | 下一步 |",
-        "|---:|---|---|---|---|---|---|---|",
+        "| 优先级 | Ticker | 名称 | 分组 | 状态 | 研究阶段 | 周期 | 标签 | 下一步 |",
+        "|---:|---|---|---|---|---|---|---|---|",
     ]
     for item in payload.get("items") or []:
         tags = ", ".join(item.get("tags") or [])
         lines.append(
-            "| {priority} | {ticker} | {name} | {group} | `{status}` | {horizon} | {tags} | {next_action} |".format(
+            "| {priority} | {ticker} | {name} | {group} | `{status}` | `{research_state}` | {horizon} | {tags} | {next_action} |".format(
                 priority=item.get("priority", ""),
                 ticker=item.get("ticker", "unknown"),
                 name=item.get("name") or "",
                 group=item.get("group") or "",
                 status=item.get("status") or "",
+                research_state=item.get("research_state") or "new",
                 horizon=item.get("horizon") or "",
                 tags=tags,
                 next_action=item.get("next_action") or "",
@@ -374,6 +535,178 @@ def render_watchlist_markdown(payload: dict[str, Any]) -> str:
             "### 分组",
             *bullet_list([f"{item.get('group')}: {item.get('active_count')} active / {item.get('count')} total" for item in payload.get("group_summary") or []]),
             "",
+            f"- QA status: `{qa.get('status', 'unknown')}`",
+            *([] if not qa.get("warnings") else bullet_list(qa.get("warnings"))),
+            "- Not investment advice: true",
+            "",
+            "</details>",
+        ]
+    )
+    return "\n".join(lines).strip() + "\n"
+
+
+def render_search_markdown(payload: dict[str, Any]) -> str:
+    candidates = payload.get("search_candidates") if isinstance(payload.get("search_candidates"), list) else []
+    qa = payload.get("qa_status") if isinstance(payload.get("qa_status"), dict) else {}
+    lines = [
+        f"# A股搜索卡：{payload.get('query', '')}",
+        "",
+        f"- 状态：`{payload.get('status', 'unknown')}`",
+        f"- 市场：`{payload.get('market', 'a_share')}`",
+        "",
+        "| Ticker | 名称 | 匹配方式 | 置信度 | 标识状态 |",
+        "|---|---|---|---|---|",
+    ]
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        lines.append(
+            "| {ticker} | {name} | {match} | {confidence} | {status} |".format(
+                ticker=item.get("ticker", "unknown"),
+                name=item.get("name", ""),
+                match=item.get("match_type", "unknown"),
+                confidence=item.get("confidence", "unknown"),
+                status=item.get("identifier_status", "unknown"),
+            )
+        )
+    lines.extend(
+        [
+            "",
+            "<details>",
+            "<summary>数据与 QA</summary>",
+            "",
+            *source_summary(payload.get("source_capability_matrix")),
+            f"- QA status: `{qa.get('status', 'unknown')}`",
+            *([] if not payload.get("missing_data") else bullet_list(payload.get("missing_data"))),
+            "- Not investment advice: true",
+            "",
+            "</details>",
+        ]
+    )
+    return "\n".join(lines).strip() + "\n"
+
+
+def render_alerts_markdown(payload: dict[str, Any]) -> str:
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    checks = ((payload.get("alert_check_result") or {}).get("checks") if isinstance(payload.get("alert_check_result"), dict) else None) or []
+    qa = payload.get("qa_status") if isinstance(payload.get("qa_status"), dict) else {}
+    lines = [
+        "# 价格提醒卡",
+        "",
+        f"- 操作：`{payload.get('action', 'unknown')}` / `{payload.get('operation_status', 'ok')}`",
+        f"- 文件：`{payload.get('alerts_file', 'unknown')}`",
+        "",
+        "| 项目 | 数量 |",
+        "|---|---:|",
+        f"| 全部规则 | {summary.get('total_count', 0)} |",
+        f"| 活跃 | {summary.get('active_count', 0)} |",
+        f"| 已触发 | {summary.get('triggered_count', 0)} |",
+        f"| 已过期 | {summary.get('expired_count', 0)} |",
+        "",
+        "## 规则",
+        "",
+        "| Ticker | 条件 | 阈值 | 状态 | 最近价格 |",
+        "|---|---|---:|---|---:|",
+    ]
+    for rule in payload.get("alert_rules") or []:
+        if not isinstance(rule, dict):
+            continue
+        lines.append(
+            "| {ticker} | `{condition}` | {level} | `{status}` | {price} |".format(
+                ticker=rule.get("ticker", "unknown"),
+                condition=rule.get("condition", "unknown"),
+                level=format_number(rule.get("level")),
+                status=rule.get("status", "unknown"),
+                price=format_number(rule.get("last_observed_price")),
+            )
+        )
+    if checks:
+        lines.extend(["", "## 检查结果", "", "| Ticker | 状态 | 最新价 | 触发 |", "|---|---|---:|---|"])
+        for check in checks:
+            if isinstance(check, dict):
+                lines.append(
+                    f"| {check.get('ticker', 'unknown')} | `{check.get('status', 'unknown')}` | {format_number(check.get('latest_price'))} | {yes_no(check.get('triggered'))} |"
+                )
+    lines.extend(
+        [
+            "",
+            "<details>",
+            "<summary>数据与 QA</summary>",
+            "",
+            f"- QA status: `{qa.get('status', 'unknown')}`",
+            *([] if not qa.get("warnings") else bullet_list(qa.get("warnings"))),
+            "- 不创建、不发送、不执行订单。",
+            "- Not investment advice: true",
+            "",
+            "</details>",
+        ]
+    )
+    return "\n".join(lines).strip() + "\n"
+
+
+def render_brief_markdown(payload: dict[str, Any]) -> str:
+    market_brief = payload.get("market_brief") if isinstance(payload.get("market_brief"), dict) else {}
+    morning = payload.get("morning_brief") if isinstance(payload.get("morning_brief"), dict) else {}
+    market_context = morning.get("market_context") if isinstance(morning.get("market_context"), dict) else {}
+    summary = market_brief.get("summary") if isinstance(market_brief.get("summary"), dict) else {}
+    qa = payload.get("qa_status") if isinstance(payload.get("qa_status"), dict) else {}
+    lines = [
+        f"# Morning Brief（晨会简报）：{payload.get('review_date', 'unknown')}",
+        "",
+        "- 每日观察池摘要：已升级为 Morning Brief。",
+        f"- 模式：`{(payload.get('analysis_mode') or {}).get('mode', 'research')}`",
+        f"- 文件：`{payload.get('watchlist_file', 'unknown')}`",
+        "",
+        "| 项目 | 内容 |",
+        "|---|---|",
+        f"| 观察池 | {summary.get('watchlist_name', 'default')} |",
+        f"| 市场 | `{summary.get('market', 'unknown')}` |",
+        f"| 覆盖标的 | {summary.get('reviewed_count', 0)} |",
+        f"| 有行情标的 | {summary.get('quote_available_count', 0)} |",
+        f"| 触发提醒 | {summary.get('triggered_alert_count', 0)} |",
+        f"| 新闻状态 | `{summary.get('news_status', 'unknown')}` |",
+        f"| 动态排序 | `{summary.get('dynamic_ranking', 'disabled')}` |",
+        f"| Top10 | {', '.join(summary.get('top10_candidates') or []) or 'N/A'} |",
+        f"| 深研 Top5 | {', '.join(summary.get('deep_research_top5') or []) or 'N/A'} |",
+        "",
+        "## 市场环境层",
+        "",
+        f"- 状态：`{market_context.get('status', 'source_gap')}`",
+        *bullet_list((market_context.get("missing_data") or [])[:3] if isinstance(market_context.get("missing_data"), list) else []),
+        "",
+        "## 标的快照",
+        "",
+        "| 动态分 | 优先级 | Ticker | 名称 | 分组 | 最新价 | 阶段 | 下一步 |",
+        "|---:|---:|---|---|---|---:|---|---|",
+    ]
+    for row in market_brief.get("rows") or []:
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            "| {score} | {priority} | {ticker} | {name} | {group} | {price} | `{stage}` | {next_action} |".format(
+                score=format_number(row.get("dynamic_rank_score")),
+                priority=row.get("priority", ""),
+                ticker=row.get("ticker", "unknown"),
+                name=row.get("name", ""),
+                group=row.get("group", ""),
+                price=format_number(row.get("latest_price")),
+                stage=row.get("workflow_stage", row.get("quote_status", "unknown")),
+                next_action=row.get("next_action", ""),
+            )
+        )
+    triggered = market_brief.get("triggered_alerts") if isinstance(market_brief.get("triggered_alerts"), list) else []
+    if triggered:
+        lines.extend(["", "## 触发提醒", *bullet_list([f"{item.get('ticker')}: {item.get('condition')} {item.get('level')}" for item in triggered if isinstance(item, dict)])])
+    todos = morning.get("today_todos") if isinstance(morning.get("today_todos"), list) else []
+    if todos:
+        lines.extend(["", "## 今日待办", *bullet_list(todos)])
+    lines.extend(
+        [
+            "",
+            "<details>",
+            "<summary>数据与 QA</summary>",
+            "",
+            *source_summary(payload.get("source_capability_matrix")),
             f"- QA status: `{qa.get('status', 'unknown')}`",
             *([] if not qa.get("warnings") else bullet_list(qa.get("warnings"))),
             "- Not investment advice: true",

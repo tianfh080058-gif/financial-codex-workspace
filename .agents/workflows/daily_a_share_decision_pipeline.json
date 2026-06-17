@@ -1,11 +1,56 @@
 {
   "workflow_id": "daily_a_share_decision_pipeline",
   "title": "Daily A-share watchlist-to-decision pipeline",
+  "user_entry": {
+    "scenario_id": "daily_watchlist_pipeline",
+    "executor": "watchlist_review",
+    "label_zh": "每日观察池到条件决策",
+    "match_terms": [
+      "每日",
+      "今天",
+      "看盘",
+      "观察池",
+      "股票池",
+      "摘要",
+      "提醒",
+      "Top10",
+      "Top5"
+    ],
+    "example_utterances": [
+      "帮我看今天观察池",
+      "跑一下每日A股决策流程",
+      "从观察池筛 Top10，再挑 Top5 做条件决策"
+    ],
+    "primary_action": "检查观察池、提醒、Top10/Top5 和条件化决策候选",
+    "required_inputs_ui": [
+      {
+        "field": "watchlist_file",
+        "label_zh": "观察池文件",
+        "question_zh": "使用哪个观察池文件？",
+        "default_zh": ".research/watchlists/default.json"
+      },
+      {
+        "field": "review_date",
+        "label_zh": "复盘日期",
+        "question_zh": "复盘哪一天？",
+        "default_zh": "今天"
+      },
+      {
+        "field": "analysis_mode",
+        "label_zh": "分析模式",
+        "question_zh": "使用研究模式还是决策辅助模式？",
+        "default_zh": "decision_support"
+      }
+    ],
+    "default_display_profile": "app_card"
+  },
   "intent_triggers": [
     "每日A股决策流程",
     "观察池到交易计划",
     "Top10 Top5 条件化决策",
-    "组合使用 watchlist deep research decision support"
+    "组合使用 watchlist deep research decision support",
+    "OpenStock style local market workspace",
+    "每日观察池摘要与提醒检查"
   ],
   "required_skills": [
     "financial-services-skill-router",
@@ -44,7 +89,10 @@
     "evidence_gate_policy",
     "polymarket_query_terms",
     "polymarket_lookback_days",
-    "polymarket_max_markets"
+    "polymarket_max_markets",
+    "alert_rules",
+    "news_preferences",
+    "source_refresh_policy"
   ],
   "defaults": {
     "screen_top_n": 10,
@@ -54,6 +102,27 @@
     "analysis_mode": "decision_support"
   },
   "pipeline_stages": [
+    {
+      "stage_id": "search_and_normalize",
+      "workflow": "watchlist_daily_review",
+      "purpose": "Normalize new A-share names or tickers before entering the watchlist.",
+      "input_scope": "user_query_or_watchlist_update",
+      "output": "search_candidates"
+    },
+    {
+      "stage_id": "alert_check",
+      "workflow": "watchlist_daily_review",
+      "purpose": "Check local price alerts and carry triggered conditions into the daily brief as evidence, not instructions.",
+      "input_scope": "active_alert_rules",
+      "output": "alert_check_result"
+    },
+    {
+      "stage_id": "market_brief",
+      "workflow": "watchlist_daily_review",
+      "purpose": "Build the daily watchlist market brief with quote availability, source gaps, and triggered alerts.",
+      "input_scope": "full_watchlist",
+      "output": "market_brief"
+    },
     {
       "stage_id": "screen_top10",
       "workflow": "watchlist_daily_review",
@@ -112,15 +181,23 @@
   ],
   "prompts": [
     "prompts/watchlist-management-zh.md",
+    "prompts/openstock-style-market-workspace-zh.md",
     "prompts/daily-a-share-decision-pipeline-zh.md",
     "prompts/app-conversation-display-zh.md"
   ],
   "cli_commands": [
+    "python3 -m trading_core.cli search --query 300033 --format json",
     "python3 -m trading_core.cli watchlist --file .research/watchlists/default.json",
+    "python3 -m trading_core.cli alerts --check --file .research/alerts/alerts.jsonl",
+    "python3 -m trading_core.cli brief --watchlist .research/watchlists/default.json --store",
     "python3 -m trading_core.cli decision --ticker 300033.SZ --market a_share --horizon 20d --mode conditional_strong",
     "python3 tools/check_research_integrity.py --input path/to/record.json --profile a_share_decision"
   ],
   "outputs": [
+    "search_candidates",
+    "alert_rules",
+    "alert_check_result",
+    "market_brief",
     "top10_watchlist",
     "top5_deep_research",
     "evidence_sufficiency",
@@ -138,6 +215,9 @@
   "display_profile": "app_card",
   "artifact_paths": [
     ".research/watchlists/*.json",
+    ".research/alerts/alerts.jsonl",
+    ".research/briefs/YYYY-MM-DD/*.json",
+    ".research/briefs/YYYY-MM-DD/*.md",
     ".research/runs/*.jsonl",
     ".research/reports/YYYY-MM-DD/*.md",
     ".research/reviews/*.json"

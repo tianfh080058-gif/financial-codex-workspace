@@ -1,6 +1,53 @@
 {
   "workflow_id": "a_share_decision_support",
   "title": "A-share conditional decision support",
+  "user_entry": {
+    "scenario_id": "single_stock_decision",
+    "executor": "decision_support",
+    "label_zh": "单股条件决策辅助",
+    "match_terms": [
+      "买卖点",
+      "条件",
+      "交易计划",
+      "决策",
+      "单股",
+      "这只票",
+      "分析这只票",
+      "值不值得"
+    ],
+    "example_utterances": [
+      "分析这只票",
+      "300033.SZ 现在怎么跟踪",
+      "给我一个条件化买卖点计划"
+    ],
+    "primary_action": "生成 decision_card 和 conditional_trade_plan",
+    "required_inputs_ui": [
+      {
+        "field": "ticker",
+        "label_zh": "股票代码",
+        "question_zh": "要分析哪只 A股？"
+      },
+      {
+        "field": "market",
+        "label_zh": "市场",
+        "question_zh": "使用哪个市场规则？",
+        "default_zh": "a_share"
+      },
+      {
+        "field": "horizon",
+        "label_zh": "观察周期",
+        "question_zh": "决策辅助看多长周期？",
+        "default_zh": "20d"
+      },
+      {
+        "field": "analysis_mode",
+        "label_zh": "分析模式",
+        "question_zh": "使用哪种分析模式？",
+        "default_zh": "decision_support"
+      }
+    ],
+    "default_display_profile": "app_card"
+  },
   "intent_triggers": [
     "A股条件化买卖点",
     "单只股票1-4周交易决策辅助",

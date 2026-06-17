@@ -10,6 +10,8 @@ unless the user explicitly asks otherwise.
 | Path | Purpose |
 |---|---|
 | `.research/watchlists/` | Watchlist definitions, groups, notes, review preferences, and desktop conversation-managed pools. |
+| `.research/alerts/` | Local conditional price alert rules and alert check JSONL; never an order blotter. |
+| `.research/briefs/` | Daily watchlist market briefs in JSON/Markdown with source gaps and QA status. |
 | `.research/runs/` | Decision cards, source logs, QA records, and run-level JSONL. |
 | `.research/backtests/` | Backtest run records, validation summaries, and post-review JSONL. |
 | `.research/journals/` | Parsed broker trade journals and behavior diagnostics. |

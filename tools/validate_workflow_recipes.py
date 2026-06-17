@@ -27,6 +27,7 @@ EXPECTED_WORKFLOWS = {
 REQUIRED_FIELDS = {
     "workflow_id",
     "title",
+    "user_entry",
     "intent_triggers",
     "required_skills",
     "execution_order",
@@ -39,6 +40,24 @@ REQUIRED_FIELDS = {
     "qa_gates",
     "display_profile",
     "artifact_paths",
+}
+REQUIRED_USER_ENTRY_FIELDS = {
+    "scenario_id",
+    "executor",
+    "label_zh",
+    "match_terms",
+    "example_utterances",
+    "primary_action",
+    "required_inputs_ui",
+    "default_display_profile",
+}
+ALLOWED_EXECUTORS = {
+    "watchlist_review",
+    "decision_support",
+    "deep_research",
+    "journal_review",
+    "strategy_validation",
+    "factor_validation",
 }
 
 
@@ -82,6 +101,62 @@ def validate_cli_command(command: str, path: Path, subcommands: set[str], findin
             add(findings, "ERROR", path, f"tool path does not exist: {parts[1]}")
         return
     add(findings, "WARN", path, f"CLI command was not recognized for deep validation: {command}")
+
+
+def validate_user_entry(recipe: dict[str, Any], path: Path, findings: list[Finding]) -> str | None:
+    entry = recipe.get("user_entry")
+    if not isinstance(entry, dict):
+        add(findings, "ERROR", path, "user_entry must be an object")
+        return None
+    missing = sorted(REQUIRED_USER_ENTRY_FIELDS - set(entry))
+    if missing:
+        add(findings, "ERROR", path, f"user_entry missing fields: {', '.join(missing)}")
+
+    scenario_id = entry.get("scenario_id")
+    if not isinstance(scenario_id, str) or not scenario_id:
+        add(findings, "ERROR", path, "user_entry.scenario_id must be a non-empty string")
+        scenario_id = None
+    for key in ("label_zh", "primary_action"):
+        if not isinstance(entry.get(key), str) or not entry.get(key):
+            add(findings, "ERROR", path, f"user_entry.{key} must be a non-empty string")
+    executor = entry.get("executor")
+    if executor not in ALLOWED_EXECUTORS:
+        add(findings, "ERROR", path, f"user_entry.executor must be one of {sorted(ALLOWED_EXECUTORS)}")
+
+    examples = entry.get("example_utterances")
+    if not isinstance(examples, list) or not examples or not all(isinstance(item, str) and item for item in examples):
+        add(findings, "ERROR", path, "user_entry.example_utterances must be a non-empty list of strings")
+    match_terms = entry.get("match_terms")
+    if not isinstance(match_terms, list) or not match_terms or not all(isinstance(item, str) and item for item in match_terms):
+        add(findings, "ERROR", path, "user_entry.match_terms must be a non-empty list of strings")
+
+    display_profile = entry.get("default_display_profile")
+    if display_profile not in DISPLAY_PROFILES:
+        add(findings, "ERROR", path, f"user_entry.default_display_profile must be one of {sorted(DISPLAY_PROFILES)}")
+
+    ui_inputs = entry.get("required_inputs_ui")
+    recipe_inputs = set(item for item in recipe.get("required_inputs", []) if isinstance(item, str))
+    if not isinstance(ui_inputs, list) or not ui_inputs:
+        add(findings, "ERROR", path, "user_entry.required_inputs_ui must be a non-empty list")
+        return scenario_id
+    covered_fields: set[str] = set()
+    for index, item in enumerate(ui_inputs):
+        if not isinstance(item, dict):
+            add(findings, "ERROR", path, f"user_entry.required_inputs_ui[{index}] must be an object")
+            continue
+        field = item.get("field")
+        if not isinstance(field, str) or not field:
+            add(findings, "ERROR", path, f"user_entry.required_inputs_ui[{index}].field must be a non-empty string")
+            continue
+        covered_fields.add(field)
+        if recipe_inputs and field not in recipe_inputs:
+            add(findings, "WARN", path, f"user_entry.required_inputs_ui field is not in required_inputs: {field}")
+        for key in ("label_zh", "question_zh"):
+            if not isinstance(item.get(key), str) or not item.get(key):
+                add(findings, "ERROR", path, f"user_entry.required_inputs_ui[{index}].{key} must be a non-empty string")
+    for field in sorted(recipe_inputs - covered_fields):
+        add(findings, "ERROR", path, f"user_entry.required_inputs_ui missing required input question: {field}")
+    return scenario_id
 
 
 def validate_recipe(path: Path, subcommands: set[str]) -> list[Finding]:
@@ -133,6 +208,8 @@ def validate_recipe(path: Path, subcommands: set[str]) -> list[Finding]:
     if display_profile not in DISPLAY_PROFILES:
         add(findings, "ERROR", path, f"display_profile must be one of {sorted(DISPLAY_PROFILES)}")
 
+    validate_user_entry(recipe, path, findings)
+
     for command in require_list(recipe, path, "cli_commands", findings):
         if isinstance(command, str):
             validate_cli_command(command, path, subcommands, findings)
@@ -152,8 +229,21 @@ def main() -> int:
         for missing in sorted(EXPECTED_WORKFLOWS - found_ids):
             findings.append(Finding("ERROR", WORKFLOWS_DIR, f"missing expected workflow: {missing}"))
         subcommands = load_cli_subcommands()
+        scenario_ids: dict[str, Path] = {}
         for path in paths:
             findings.extend(validate_recipe(path, subcommands))
+            try:
+                recipe = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            entry = recipe.get("user_entry") if isinstance(recipe, dict) else None
+            scenario_id = entry.get("scenario_id") if isinstance(entry, dict) else None
+            if not isinstance(scenario_id, str) or not scenario_id:
+                continue
+            if scenario_id in scenario_ids:
+                findings.append(Finding("ERROR", path, f"duplicate user_entry.scenario_id also used by {scenario_ids[scenario_id].name}: {scenario_id}"))
+            else:
+                scenario_ids[scenario_id] = path
 
     errors = [finding for finding in findings if finding.severity == "ERROR"]
     warnings = [finding for finding in findings if finding.severity == "WARN"]

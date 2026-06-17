@@ -1,6 +1,46 @@
 {
   "workflow_id": "a_share_deep_research",
   "title": "A-share deep research",
+  "user_entry": {
+    "scenario_id": "a_share_deep_research",
+    "executor": "deep_research",
+    "label_zh": "A股深度研究",
+    "match_terms": [
+      "深研",
+      "深度研究",
+      "基本面",
+      "公司研究",
+      "thesis",
+      "投资逻辑",
+      "研究报告"
+    ],
+    "example_utterances": [
+      "帮我深研这家公司",
+      "做一个 A股基本面研究框架",
+      "检查这只票的 thesis"
+    ],
+    "primary_action": "搭建深度研究证据矩阵和数据请求清单",
+    "required_inputs_ui": [
+      {
+        "field": "ticker",
+        "label_zh": "股票代码",
+        "question_zh": "要深研哪只 A股？"
+      },
+      {
+        "field": "company_name_or_security_master",
+        "label_zh": "公司识别信息",
+        "question_zh": "是否已有公司名称或 security master？",
+        "default_zh": "由 ticker 解析"
+      },
+      {
+        "field": "analysis_mode",
+        "label_zh": "分析模式",
+        "question_zh": "使用研究模式还是决策辅助模式？",
+        "default_zh": "research"
+      }
+    ],
+    "default_display_profile": "audit_appendix"
+  },
   "intent_triggers": [
     "A股深度研究",
     "单股基本面研究",

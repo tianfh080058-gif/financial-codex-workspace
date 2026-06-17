@@ -1,6 +1,46 @@
 {
   "workflow_id": "alpha_factor_bench",
   "title": "Alpha factor bench",
+  "user_entry": {
+    "scenario_id": "factor_validation",
+    "executor": "factor_validation",
+    "label_zh": "因子评估",
+    "match_terms": [
+      "因子",
+      "Alpha",
+      "IC",
+      "IR",
+      "GTJA",
+      "CSI300",
+      "Alpha Zoo"
+    ],
+    "example_utterances": [
+      "评估 CSI300 的 GTJA191 因子",
+      "跑一个 Alpha Zoo 因子筛选",
+      "看 IC IR 因子表现"
+    ],
+    "primary_action": "生成 Alpha 因子评估请求和分类阈值卡片",
+    "required_inputs_ui": [
+      {
+        "field": "universe",
+        "label_zh": "股票池",
+        "question_zh": "评估哪个 universe？",
+        "default_zh": "csi300"
+      },
+      {
+        "field": "zoo",
+        "label_zh": "因子库",
+        "question_zh": "使用哪个因子库？",
+        "default_zh": "gtja191"
+      },
+      {
+        "field": "period",
+        "label_zh": "评估区间",
+        "question_zh": "评估哪个时间区间？"
+      }
+    ],
+    "default_display_profile": "cli_markdown"
+  },
   "intent_triggers": [
     "CSI300 因子筛选",
     "Alpha Zoo",

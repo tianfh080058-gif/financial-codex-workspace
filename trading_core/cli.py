@@ -8,27 +8,15 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from tools.calculate_technical_analysis import build_technical_analysis
-from tools.check_research_integrity import validate_record
 from tools.review_decision_support import read_jsonl, summarize_record
 
-from .alpha import alpha_bench_skeleton
-from .backtest import BacktestRequest, VibeBacktestBridge, run_local_breakout_backtest
-from .common import RESEARCH_ROOT, append_jsonl, print_json, write_json
-from .data import IfindFirstMarketDataProvider
-from .decision import build_decision_record
-from .journal import analyze_journal
-from .polymarket import PolymarketMacroSignalProvider, default_prediction_market_context
+from .common import RESEARCH_ROOT, print_json, write_json
+from .executors import execute_workflow
+from .orchestrator import RunIntentOptions, run_user_intent
+from .registry import WorkflowRegistry
 from .renderers import render_markdown
-from .watchlist import (
-    init_watchlist,
-    metadata_updates_from_args,
-    parse_set_pairs,
-    remove_watchlist_item,
-    show_watchlist,
-    update_watchlist_item,
-    upsert_watchlist_item,
-)
+from .runtime import ArtifactPolicy, WorkflowContext, WorkflowResult
+from .watchlist import metadata_updates_from_args, parse_set_pairs
 
 
 def emit_result(kind: str, payload: dict[str, Any], output_format: str) -> None:
@@ -38,93 +26,43 @@ def emit_result(kind: str, payload: dict[str, Any], output_format: str) -> None:
     print(render_markdown(kind, payload), end="")
 
 
-def rebase_polymarket_source_refs(context: dict[str, Any], offset: int) -> None:
-    """Adjust provider-local source_log refs after appending to the record log."""
+def emit_workflow_result(result: WorkflowResult, output_format: str) -> None:
+    record = result.machine_record or {}
+    if output_format == "json":
+        print_json(record)
+        return
+    print(result.display_card or render_markdown(result.display_kind, record), end="")
 
-    def rebase_ref(value: Any) -> Any:
-        if not isinstance(value, str) or not value.startswith("source_log[") or not value.endswith("]"):
-            return value
-        try:
-            index = int(value[len("source_log[") : -1])
-        except ValueError:
-            return value
-        return f"source_log[{index + offset}]"
 
-    refs = context.get("source_ref")
-    if isinstance(refs, list):
-        context["source_ref"] = [rebase_ref(ref) for ref in refs]
-    markets = context.get("selected_markets")
-    if isinstance(markets, list):
-        for market in markets:
-            if isinstance(market, dict) and isinstance(market.get("source_ref"), list):
-                market["source_ref"] = [rebase_ref(ref) for ref in market["source_ref"]]
+def run_fixed_workflow(workflow_id: str, context: WorkflowContext) -> WorkflowResult:
+    route = WorkflowRegistry().route_intent(context, workflow_id=workflow_id)
+    return execute_workflow(route, context)
 
 
 def command_decision(args: argparse.Namespace) -> int:
-    provider = IfindFirstMarketDataProvider()
-    start = args.start
-    end = args.end
-    security = provider.get_security_master(args.ticker, args.market)
-    ohlcv = provider.get_ohlcv(
-        args.ticker,
-        args.market,
-        start,
-        end,
-        local_path=args.ohlcv,
-        adjustment_basis=args.adjustment_basis,
-    )
-    technical = None
-    missing_data = [*security.missing_data, *ohlcv.missing_data]
-    source_log = [*security.source_log, *ohlcv.source_log]
-    capability = ohlcv.source_capability_matrix or security.source_capability_matrix or provider.capability_matrix()
-    if ohlcv.status == "ok" and ohlcv.data:
-        technical = build_technical_analysis(
-            ohlcv.data,
-            ticker=args.ticker,
-            adjustment_basis=args.adjustment_basis,
-            source_ref=["source_log[1]"] if security.source_log else ["source_log[0]"],
-        )
-    backtest_validation = None
-    if args.backtest_ohlcv:
-        backtest_validation = run_local_breakout_backtest(Path(args.backtest_ohlcv))
-    prediction_market_context = default_prediction_market_context("Polymarket context was skipped or not requested.")
-    if not args.skip_polymarket:
-        poly_provider = PolymarketMacroSignalProvider()
-        poly = poly_provider.fetch_context(
+    result = run_fixed_workflow(
+        "a_share_decision_support",
+        WorkflowContext(
+            command="decision",
+            intent=f"decision {args.ticker}",
             ticker=args.ticker,
             market=args.market,
-            security_master=security.data,
-            query_terms=args.polymarket_query,
-            max_markets=args.polymarket_max_markets,
-            lookback_days=args.polymarket_lookback_days,
-            snapshot_root=RESEARCH_ROOT / "polymarket",
-        )
-        rebase_polymarket_source_refs(poly.context, len(source_log))
-        prediction_market_context = poly.context
-        source_log.extend(poly.source_log)
-        capability = [*capability, *poly.source_capability_matrix]
-        missing_data.extend(poly.missing_data)
-    record = build_decision_record(
-        ticker=args.ticker,
-        market=args.market,
-        horizon=args.horizon,
-        mode=args.mode,
-        technical_analysis=technical,
-        source_log=source_log,
-        source_capability_matrix=capability,
-        security_master=security.data,
-        missing_data=missing_data,
-        backtest_validation=backtest_validation,
-        prediction_market_context=prediction_market_context,
+            horizon=args.horizon,
+            mode=args.mode,
+            start=args.start,
+            end=args.end,
+            ohlcv=Path(args.ohlcv) if args.ohlcv else None,
+            backtest_ohlcv=Path(args.backtest_ohlcv) if args.backtest_ohlcv else None,
+            adjustment_basis=args.adjustment_basis,
+            skip_polymarket=args.skip_polymarket,
+            polymarket_query=args.polymarket_query,
+            polymarket_lookback_days=args.polymarket_lookback_days,
+            polymarket_max_markets=args.polymarket_max_markets,
+            artifact_policy=ArtifactPolicy(store=args.store, output_path=Path(args.output) if args.output else None),
+        ),
     )
-    integrity = validate_record(record)
-    record["report_integrity_status"] = integrity["report_integrity_status"]
-    if args.output:
-        write_json(Path(args.output), record)
-    if args.store:
-        append_jsonl(RESEARCH_ROOT / "runs" / "decision_support.jsonl", record)
-    emit_result("decision", record, args.format)
-    return 0 if integrity["status"] == "pass" else 2
+    emit_workflow_result(result, args.format)
+    return result.exit_code
 
 
 def command_watchlist(args: argparse.Namespace) -> int:
@@ -138,72 +76,141 @@ def command_watchlist(args: argparse.Namespace) -> int:
         raise ValueError("use only one of --enable-review or --disable-review")
     if args.include_daily and args.exclude_daily:
         raise ValueError("use only one of --include-daily or --exclude-daily")
+    metadata = {**metadata_updates_from_args(args), **parse_set_pairs(args.set)}
+    result = run_fixed_workflow(
+        "watchlist_daily_review",
+        WorkflowContext(
+            command="watchlist",
+            action="watchlist",
+            intent="watchlist",
+            watchlist=path,
+            watchlist_payload={
+                "init": args.init,
+                "force": args.force,
+                "add": args.add,
+                "remove": args.remove,
+                "update": args.update,
+                "name": args.name,
+                "market": args.market,
+                "metadata": metadata,
+            },
+        ),
+    )
+    emit_workflow_result(result, args.format)
+    return result.exit_code
 
-    if args.init:
-        result = init_watchlist(path, name=args.name or path.stem or "default", market=args.market or "a_share", force=args.force)
-    elif args.add:
-        item = {"ticker": args.add, **metadata_updates_from_args(args)}
-        result = upsert_watchlist_item(path, item)
-    elif args.remove:
-        result = remove_watchlist_item(path, args.remove)
-    elif args.update:
-        updates = {**metadata_updates_from_args(args), **parse_set_pairs(args.set)}
-        if not updates:
-            raise ValueError("watchlist --update requires metadata flags or --set field=value")
-        result = update_watchlist_item(path, args.update, updates)
-    else:
-        result = show_watchlist(path)
-    emit_result("watchlist", result, args.format)
-    return 0 if result.get("status") == "ok" else 2
+
+def command_search(args: argparse.Namespace) -> int:
+    result = run_fixed_workflow(
+        "watchlist_daily_review",
+        WorkflowContext(
+            command="search",
+            action="search",
+            intent=f"search {args.query}",
+            query=args.query,
+            market=args.market,
+            artifact_policy=ArtifactPolicy(output_path=Path(args.output) if args.output else None),
+        ),
+    )
+    emit_workflow_result(result, args.format)
+    return result.exit_code
+
+
+def command_alerts(args: argparse.Namespace) -> int:
+    operations = [bool(args.add), bool(args.check), bool(args.list)]
+    if sum(operations) != 1:
+        raise ValueError("use exactly one alerts operation: --add, --check, or --list")
+    result = run_fixed_workflow(
+        "watchlist_daily_review",
+        WorkflowContext(
+            command="alerts",
+            action="alerts",
+            intent="alerts",
+            alerts_file=Path(args.file),
+            market=args.market,
+            alert_payload={
+                "add": args.add,
+                "condition": args.condition,
+                "level": args.level,
+                "expires": args.expires,
+                "note": args.note,
+                "check": args.check,
+                "list": args.list,
+            },
+            artifact_policy=ArtifactPolicy(output_path=Path(args.output) if args.output else None),
+        ),
+    )
+    emit_workflow_result(result, args.format)
+    return result.exit_code
+
+
+def command_brief(args: argparse.Namespace) -> int:
+    result = run_fixed_workflow(
+        "watchlist_daily_review",
+        WorkflowContext(
+            command="brief",
+            action="brief",
+            intent="brief",
+            watchlist=Path(args.watchlist),
+            alerts_file=Path(args.alerts_file),
+            review_date=args.date,
+            mode=args.mode,
+            artifact_policy=ArtifactPolicy(store=args.store, output_path=Path(args.output) if args.output else None),
+        ),
+    )
+    emit_workflow_result(result, args.format)
+    return result.exit_code
 
 
 def command_backtest(args: argparse.Namespace) -> int:
-    bridge = VibeBacktestBridge()
-    prepared = bridge.prepare_run(
-        BacktestRequest(
+    result = run_fixed_workflow(
+        "vibe_backtest_validation",
+        WorkflowContext(
+            command="backtest",
+            intent=f"backtest {args.ticker}",
             ticker=args.ticker,
+            market=args.market,
             strategy=args.strategy,
             start=args.start,
             end=args.end,
-            market=args.market,
             source=args.source,
-        )
+            ohlcv=Path(args.ohlcv) if args.ohlcv else None,
+            run_vibe=args.run_vibe,
+            artifact_policy=ArtifactPolicy(legacy_default_write=True, output_path=Path(args.output) if args.output else None),
+        ),
     )
-    result: dict[str, Any] = {
-        "status": "ok",
-        "prepared_vibe_run": prepared,
-        "backtest_validation": None,
-        "not_investment_advice": True,
-    }
-    if args.ohlcv:
-        result["backtest_validation"] = run_local_breakout_backtest(Path(args.ohlcv))
-    if args.run_vibe:
-        result["vibe_execution"] = bridge.run(prepared["run_dir"])
-    if args.output:
-        write_json(Path(args.output), result)
-    append_jsonl(RESEARCH_ROOT / "backtests" / "backtest_runs.jsonl", result)
-    emit_result("backtest", result, args.format)
-    return 0
+    emit_workflow_result(result, args.format)
+    return result.exit_code
 
 
 def command_alpha_bench(args: argparse.Namespace) -> int:
-    result = alpha_bench_skeleton(args.universe, args.zoo, args.period)
-    if args.output:
-        write_json(Path(args.output), result)
-    emit_result("alpha_bench", result, args.format)
-    return 0 if result.get("status") != "fail" else 2
+    result = run_fixed_workflow(
+        "alpha_factor_bench",
+        WorkflowContext(
+            command="alpha-bench",
+            intent=f"alpha {args.universe} {args.zoo}",
+            universe=args.universe,
+            zoo=args.zoo,
+            period=args.period,
+            artifact_policy=ArtifactPolicy(output_path=Path(args.output) if args.output else None),
+        ),
+    )
+    emit_workflow_result(result, args.format)
+    return result.exit_code
 
 
 def command_journal(args: argparse.Namespace) -> int:
-    result = analyze_journal(Path(args.file))
-    output_path = RESEARCH_ROOT / "journals" / f"{Path(args.file).stem}.analysis.json"
-    shadow_path = RESEARCH_ROOT / "shadow" / f"{Path(args.file).stem}.shadow.json"
-    result["artifact_paths"] = {"journal_analysis": str(output_path), "shadow_profile": str(shadow_path)}
-    result["artifact_refs"] = dict(result["artifact_paths"])
-    write_json(output_path, result)
-    write_json(shadow_path, result["shadow_account_profile"])
-    emit_result("journal", result, args.format)
-    return 0
+    result = run_fixed_workflow(
+        "trade_journal_shadow_review",
+        WorkflowContext(
+            command="journal",
+            intent=f"journal {args.file}",
+            file=Path(args.file),
+            artifact_policy=ArtifactPolicy(legacy_default_write=True),
+        ),
+    )
+    emit_workflow_result(result, args.format)
+    return result.exit_code
 
 
 def command_review(args: argparse.Namespace) -> int:
@@ -228,9 +235,76 @@ def command_check_ifind(args: argparse.Namespace) -> int:
     return proc.returncode
 
 
+def command_run(args: argparse.Namespace) -> int:
+    result = run_user_intent(
+        RunIntentOptions(
+            intent=args.intent,
+            ticker=args.ticker,
+            file=Path(args.file) if args.file else None,
+            watchlist=Path(args.watchlist),
+            alerts_file=Path(args.alerts_file),
+            horizon=args.horizon,
+            review_date=args.date,
+            market=args.market,
+            mode=args.mode,
+            dry_run=args.dry_run,
+            store=args.store,
+            strategy=args.strategy,
+            start=args.start,
+            end=args.end,
+            universe=args.universe,
+            zoo=args.zoo,
+            period=args.period,
+            ohlcv=Path(args.ohlcv) if args.ohlcv else None,
+            backtest_ohlcv=Path(args.backtest_ohlcv) if args.backtest_ohlcv else None,
+            adjustment_basis=args.adjustment_basis,
+            skip_polymarket=args.skip_polymarket,
+            polymarket_query=args.polymarket_query,
+            polymarket_lookback_days=args.polymarket_lookback_days,
+            polymarket_max_markets=args.polymarket_max_markets,
+        )
+    )
+    if args.output:
+        write_json(Path(args.output), result)
+    if args.format == "json":
+        print_json(result)
+    else:
+        print(result.get("display_card", ""), end="")
+    return 1 if result.get("status") in {"fail", "error"} else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Financial workspace trading decision support CLI.")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    run = subparsers.add_parser("run", help="Route a natural-language user goal to the right workflow")
+    run.add_argument("--intent", required=True, help="Natural-language user goal, for example 帮我看今天观察池")
+    run.add_argument("--dry-run", action="store_true", help="Return only the routed execution plan")
+    run.add_argument("--ticker", help="Ticker for single-stock decision, research, or backtest workflows")
+    run.add_argument("--file", help="Input file for journal review workflows")
+    run.add_argument("--watchlist", default=str(RESEARCH_ROOT / "watchlists" / "default.json"))
+    run.add_argument("--alerts-file", default=str(RESEARCH_ROOT / "alerts" / "alerts.jsonl"))
+    run.add_argument("--horizon", default="20d")
+    run.add_argument("--date", help="Review date in YYYY-MM-DD")
+    run.add_argument("--market", default="a_share")
+    run.add_argument("--mode", default="conditional_strong")
+    run.add_argument("--store", action="store_true", help="Persist workflow artifacts when supported")
+    run.add_argument("--strategy", help="Backtest strategy, for example technical_breakout")
+    run.add_argument("--start", help="Backtest start date")
+    run.add_argument("--end", help="Backtest end date")
+    run.add_argument("--universe", help="Alpha bench universe, for example csi300")
+    run.add_argument("--zoo", help="Alpha Zoo name, for example gtja191")
+    run.add_argument("--period", help="Alpha bench period, for example 2021-2026")
+    run.add_argument("--ohlcv", help="Optional local OHLCV JSON/CSV file")
+    run.add_argument("--backtest-ohlcv", help="Optional OHLCV file for decision validation")
+    run.add_argument("--adjustment-basis", default="unknown", choices=["unadjusted", "qfq", "hfq", "unknown"])
+    run.add_argument("--skip-polymarket", action="store_true", help="Skip Polymarket macro/event evidence retrieval")
+    run.add_argument("--polymarket-query", action="append", help="Additional Polymarket macro or strongly linked query term")
+    run.add_argument("--polymarket-lookback-days", type=int, default=7)
+    run.add_argument("--polymarket-max-markets", type=int, default=5)
+    run.add_argument("--output")
+    run.add_argument("--format", default="markdown", choices=["markdown", "json"], help="Terminal output format")
+    run.set_defaults(func=command_run)
 
     decision = subparsers.add_parser("decision", help="Build decision_card and conditional_trade_plan")
     decision.add_argument("--ticker", required=True)
@@ -273,6 +347,37 @@ def build_parser() -> argparse.ArgumentParser:
     watchlist.add_argument("--exclude-daily", action="store_true")
     watchlist.add_argument("--format", default="markdown", choices=["markdown", "json"], help="Terminal output format")
     watchlist.set_defaults(func=command_watchlist)
+
+    search = subparsers.add_parser("search", help="Search or normalize an A-share ticker/name")
+    search.add_argument("--query", required=True)
+    search.add_argument("--market", default="a_share")
+    search.add_argument("--output")
+    search.add_argument("--format", default="markdown", choices=["markdown", "json"], help="Terminal output format")
+    search.set_defaults(func=command_search)
+
+    alerts = subparsers.add_parser("alerts", help="Create, list, or check local price alerts")
+    alerts.add_argument("--file", default=str(RESEARCH_ROOT / "alerts" / "alerts.jsonl"))
+    alerts.add_argument("--add", metavar="TICKER", help="Add one alert rule")
+    alerts.add_argument("--condition", choices=["above", "below"])
+    alerts.add_argument("--level", type=float)
+    alerts.add_argument("--expires", help="Day duration, for example 90d")
+    alerts.add_argument("--market", default="a_share")
+    alerts.add_argument("--note", help="Free-form local note; do not store credentials")
+    alerts.add_argument("--check", action="store_true", help="Check all active rules against available quotes")
+    alerts.add_argument("--list", action="store_true", help="List rules")
+    alerts.add_argument("--output")
+    alerts.add_argument("--format", default="markdown", choices=["markdown", "json"], help="Terminal output format")
+    alerts.set_defaults(func=command_alerts)
+
+    brief = subparsers.add_parser("brief", help="Build a daily watchlist market brief")
+    brief.add_argument("--watchlist", default=str(RESEARCH_ROOT / "watchlists" / "default.json"))
+    brief.add_argument("--alerts-file", default=str(RESEARCH_ROOT / "alerts" / "alerts.jsonl"))
+    brief.add_argument("--date", help="Review date in YYYY-MM-DD; defaults to today")
+    brief.add_argument("--mode", default="research", choices=["research", "decision_support"])
+    brief.add_argument("--store", action="store_true", help="Persist JSON and Markdown artifacts under .research/briefs")
+    brief.add_argument("--output")
+    brief.add_argument("--format", default="markdown", choices=["markdown", "json"], help="Terminal output format")
+    brief.set_defaults(func=command_brief)
 
     backtest = subparsers.add_parser("backtest", help="Prepare a Vibe run_dir and optional local validation")
     backtest.add_argument("--ticker", required=True)

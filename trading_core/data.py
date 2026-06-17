@@ -113,7 +113,50 @@ class IfindFirstMarketDataProvider:
         )
 
     def get_quote(self, ticker: str, market: str) -> DataResponse:
-        return self._gap("real_time_quotation", ticker, "quote retrieval requires live iFinD entitlement or a provided market snapshot")
+        if market != "a_share":
+            return self._gap("real_time_quotation", ticker, f"quote retrieval is not configured for market={market}")
+        ifind = self.ifind_client.request_raw(
+            "real_time_quotation",
+            {"codes": ticker, "indicators": "open,high,low,latest,volume,amount"},
+        )
+        quote = parse_ifind_quote(ifind.get("response"), ticker)
+        if ifind.get("status") == "ok" and quote:
+            return DataResponse(
+                status="ok",
+                data=quote,
+                source_capability_matrix=self.capability_matrix(),
+                source_log=[
+                    {
+                        "source_name": "同花顺/iFinD HTTP API",
+                        "source_type": "licensed_data_tool",
+                        "endpoint_or_interface": "real_time_quotation",
+                        "parameters": {"codes": ticker, "indicators": "open,high,low,latest,volume,amount"},
+                        "retrieved_at": utc_now(),
+                        "trade_date": quote.get("trade_date"),
+                        "fields": ["open", "high", "low", "latest", "volume", "amount"],
+                        "status": "ok",
+                        "limitations": [],
+                    }
+                ],
+            )
+        reason = ifind.get("missing") or ifind.get("error") or "iFinD returned no parseable quote"
+        return DataResponse(
+            status="source_gap",
+            data=None,
+            source_capability_matrix=self.capability_matrix(),
+            missing_data=[str(reason)],
+            source_log=[
+                {
+                    "source_name": "同花顺/iFinD HTTP API",
+                    "source_type": "licensed_data_tool",
+                    "endpoint_or_interface": "real_time_quotation",
+                    "parameters": {"codes": ticker, "indicators": "open,high,low,latest,volume,amount"},
+                    "retrieved_at": utc_now(),
+                    "status": "source_gap",
+                    "limitations": [str(reason)],
+                }
+            ],
+        )
 
     def get_ohlcv(
         self,
@@ -310,6 +353,56 @@ def parse_ifind_history_rows(response: Any) -> list[dict[str, Any]]:
                         row[field] = values[index]
                 rows.append(row)
     return load_rows_from_dicts(rows)
+
+
+def parse_ifind_quote(response: Any, ticker: str) -> dict[str, Any] | None:
+    if not isinstance(response, dict):
+        return None
+    tables = response.get("tables")
+    if not isinstance(tables, list) or not tables:
+        return None
+    table = tables[0]
+    if not isinstance(table, dict):
+        return None
+    payload = table.get("table") or table.get("data")
+    row: dict[str, Any] | None = None
+    if isinstance(payload, list):
+        row = next((item for item in payload if isinstance(item, dict)), None)
+    elif isinstance(payload, dict):
+        row = {}
+        for field in ("open", "high", "low", "latest", "close", "volume", "amount", "time", "date", "trade_date"):
+            value = payload.get(field)
+            if isinstance(value, list):
+                row[field] = value[0] if value else None
+            else:
+                row[field] = value
+    if not row:
+        return None
+    latest = to_float(row.get("latest") if row.get("latest") is not None else row.get("close"))
+    return {
+        "ticker": ticker,
+        "latest": latest,
+        "open": to_float(row.get("open")),
+        "high": to_float(row.get("high")),
+        "low": to_float(row.get("low")),
+        "close": to_float(row.get("close")),
+        "volume": to_float(row.get("volume")),
+        "amount": to_float(row.get("amount")),
+        "currency": "CNY",
+        "trade_date": row.get("trade_date") or row.get("date") or row.get("time"),
+        "adjustment_basis": "real_time_unadjusted",
+    }
+
+
+def to_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).replace(",", "").strip())
+    except ValueError:
+        return None
 
 
 def load_rows_from_dicts(raw_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

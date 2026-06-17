@@ -1,6 +1,34 @@
 {
   "workflow_id": "trade_journal_shadow_review",
   "title": "Trade journal and Shadow Account review",
+  "user_entry": {
+    "scenario_id": "trade_journal_review",
+    "executor": "journal_review",
+    "label_zh": "交易日志复盘",
+    "match_terms": [
+      "交易记录",
+      "成交",
+      "券商",
+      "交易日志",
+      "Shadow",
+      "行为诊断",
+      "复盘交易"
+    ],
+    "example_utterances": [
+      "复盘我的交易记录",
+      "分析券商成交导出",
+      "做一个 Shadow Account 行为诊断"
+    ],
+    "primary_action": "解析成交记录并生成交易行为诊断",
+    "required_inputs_ui": [
+      {
+        "field": "broker_export_file",
+        "label_zh": "成交导出文件",
+        "question_zh": "请提供券商成交导出文件路径，例如 CSV 或 Excel。"
+      }
+    ],
+    "default_display_profile": "app_card"
+  },
   "intent_triggers": [
     "交易记录复盘",
     "券商成交导出分析",
